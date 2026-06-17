@@ -3,6 +3,8 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
+	"path/filepath"
 
 	"github.com/99designs/keyring"
 )
@@ -57,7 +59,7 @@ func DeleteToken(projectURL string) error {
 		return err
 	}
 	if err := ring.Remove(projectURL); err != nil {
-		if errors.Is(err, keyring.ErrKeyNotFound) {
+		if errors.Is(err, keyring.ErrKeyNotFound) || errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
 		return err
@@ -65,17 +67,26 @@ func DeleteToken(projectURL string) error {
 	return nil
 }
 
+func filePassword(string) (string, error) { return keychainService, nil }
+
 func keychainConfig() keyring.Config {
+	fileDir := ""
+	if dir, err := ConfigDir(); err == nil {
+		fileDir = filepath.Join(dir, "keyring")
+	}
 	return keyring.Config{
 		ServiceName: keychainService,
 		AllowedBackends: []keyring.BackendType{
-			keyring.KeychainBackend,      // macOS Keychain
+			keyring.KeychainBackend,      // macOS Keychain (requires CGO)
 			keyring.WinCredBackend,       // Windows Credential Manager
 			keyring.SecretServiceBackend, // Linux Secret Service (D-Bus)
+			keyring.FileBackend,          // last-resort fallback (CGO-free builds, headless, CI)
 		},
+		FileDir:          fileDir,
+		FilePasswordFunc: filePassword,
 	}
 }
 
-func openKeyring() (keyring.Keyring, error) {
+var openKeyring = func() (keyring.Keyring, error) {
 	return keyring.Open(keychainConfig())
 }
