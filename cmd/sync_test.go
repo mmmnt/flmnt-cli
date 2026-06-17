@@ -3,6 +3,8 @@ package cmd
 import (
 	"strings"
 	"testing"
+
+	"github.com/mmmnt/flmnt-cli/internal/auth"
 )
 
 func TestRunAuthHelperExtractsAuthorizationHeader(t *testing.T) {
@@ -40,6 +42,30 @@ func TestSyncCommandsAreRegisteredWithExpectedFlags(t *testing.T) {
 	}
 	if !sub["push"] || !sub["pull"] {
 		t.Fatalf("expected push and pull subcommands, got %v", sub)
+	}
+}
+
+func TestResolveRemoteServerURLFallsBackToLoginConfig(t *testing.T) {
+	t.Setenv("QUORUM_SERVER_URL", "")
+	orig := authHeaderLoadConfig
+	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{ServerURL: "https://mcp.staging.flmnt.dev"}, nil
+	}
+	t.Cleanup(func() { authHeaderLoadConfig = orig })
+
+	if got := resolveRemoteServerURL(syncPushCmd); got != "https://mcp.staging.flmnt.dev" {
+		t.Fatalf("resolveRemoteServerURL = %q, want the login-config ServerURL", got)
+	}
+}
+
+func TestResolveRemoteServerURLPrefersRemoteURLFlag(t *testing.T) {
+	if err := syncPushCmd.Flags().Set("remote-url", "https://override.example"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syncPushCmd.Flags().Set("remote-url", "") })
+
+	if got := resolveRemoteServerURL(syncPushCmd); got != "https://override.example" {
+		t.Fatalf("resolveRemoteServerURL = %q, want the --remote-url override", got)
 	}
 }
 

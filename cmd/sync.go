@@ -78,12 +78,27 @@ func runSync(cmd *cobra.Command, push bool) error {
 }
 
 // resolveRemoteEndpoint resolves the OAuth-authenticated (staging) side from the
+// resolveRemoteServerURL resolves the staging MCP URL using the same precedence
+// as the workspace commands: --remote-url, then the shared chain (--server-url /
+// QUORUM_SERVER_URL / project config), then the login config that `flmnt login`
+// writes (~/.filament/config.json). Without the last fallback, sync would error
+// after a plain `flmnt login`.
+func resolveRemoteServerURL(cmd *cobra.Command) string {
+	if v, _ := cmd.Flags().GetString("remote-url"); v != "" {
+		return v
+	}
+	if v := resolveAuthServerURL(cmd); v != "" {
+		return v
+	}
+	if cfg, err := authHeaderLoadConfig(); err == nil {
+		return cfg.ServerURL
+	}
+	return ""
+}
+
 // active login, refreshing the access token the same way `mcp auth-header` does.
 func resolveRemoteEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
-	serverURL := resolveAuthServerURL(cmd)
-	if v, _ := cmd.Flags().GetString("remote-url"); v != "" {
-		serverURL = v
-	}
+	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
 		return sync.Endpoint{}, fmt.Errorf("no remote server URL (run `flmnt login` or pass --remote-url)")
 	}
