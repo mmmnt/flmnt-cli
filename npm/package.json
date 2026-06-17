@@ -1,0 +1,37 @@
+{
+	"name": "@mmmnt/flmnt",
+	"version": "0.0.0-dev",
+	"description": "flmnt CLI — installs the platform-native flmnt binary.",
+	"type": "module",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mmmnt/flmnt-cli.git"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"bin": {
+		"flmnt": "bin/flmnt.js"
+	},
+	"files": [
+		"bin/",
+		"src/",
+		"scripts/",
+		"LICENSE"
+	],
+	"os": [
+		"darwin",
+		"linux",
+		"win32"
+	],
+	"cpu": [
+		"x64",
+		"arm64"
+	],
+	"scripts": {
+		"postinstall": "node scripts/install.js",
+		"test": "vitest run --passWithNoTests",
+		"lint": "eslint \"**/*.{js,mjs,ts,tsx}\" --no-error-on-unmatched-pattern"
+	}
+}

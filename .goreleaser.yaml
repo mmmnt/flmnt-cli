@@ -1,0 +1,44 @@
+version: 2
+
+project_name: flmnt
+
+builds:
+  - id: flmnt
+    binary: flmnt
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/mmmnt/flmnt-cli/cmd.version={{.Version}}
+
+archives:
+  - id: flmnt
+    name_template: 'flmnt_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: 'flmnt_{{ .Version }}_checksums.txt'
+
+release:
+  github:
+    owner: mmmnt
+    name: flmnt-cli
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'

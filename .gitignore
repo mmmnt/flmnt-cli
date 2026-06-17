@@ -1,0 +1,7 @@
+node_modules/
+npm/lib/
+dist/
+coverage/
+*.log
+flmnt
+flmnt.exe
