@@ -21,8 +21,20 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test
-        run: go test ./...
+      - name: Test (CGO_ENABLED=0, mirrors the release build)
+        run: CGO_ENABLED=0 go test ./...
+
+      - name: Smoke-test the release binary (fail before publishing if broken)
+        run: |
+          tmp=$(mktemp -d)
+          CGO_ENABLED=0 go build -o "$tmp/flmnt" .
+          "$tmp/flmnt" version
+          out=$("$tmp/flmnt" whoami --server-url https://smoke.invalid 2>&1 || true)
+          echo "$out"
+          if echo "$out" | grep -qiE 'keyring|backend not available'; then
+            echo "::error::keychain backend unavailable in the CGO-free release binary"
+            exit 1
+          fi
 
       - uses: goreleaser/goreleaser-action@v6
         with:
