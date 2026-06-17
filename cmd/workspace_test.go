@@ -52,16 +52,19 @@ func runWorkspaceArgs(t *testing.T, gqlURL string, args ...string) (stdout, stde
 }
 
 func TestResolveGraphQLEndpointPrecedence(t *testing.T) {
-	if got := resolveGraphQLEndpoint("https://flag/graphql", "https://env/graphql", "https://srv"); got != "https://flag/graphql" {
+	if got := resolveGraphQLEndpoint("https://flag/graphql", "https://env/graphql", "https://disc/graphql", "https://srv"); got != "https://flag/graphql" {
 		t.Fatalf("flag wins: %q", got)
 	}
-	if got := resolveGraphQLEndpoint("", "https://env/graphql", "https://srv"); got != "https://env/graphql" {
+	if got := resolveGraphQLEndpoint("", "https://env/graphql", "https://disc/graphql", "https://srv"); got != "https://env/graphql" {
 		t.Fatalf("env next: %q", got)
 	}
-	if got := resolveGraphQLEndpoint("", "", "https://srv/"); got != "https://srv/graphql" {
+	if got := resolveGraphQLEndpoint("", "", "https://disc/graphql", "https://srv"); got != "https://disc/graphql" {
+		t.Fatalf("discovered next: %q", got)
+	}
+	if got := resolveGraphQLEndpoint("", "", "", "https://srv/"); got != "https://srv/graphql" {
 		t.Fatalf("derived: %q", got)
 	}
-	if got := resolveGraphQLEndpoint("", "", ""); got != "" {
+	if got := resolveGraphQLEndpoint("", "", "", ""); got != "" {
 		t.Fatalf("empty: %q", got)
 	}
 }

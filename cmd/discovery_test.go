@@ -15,7 +15,7 @@ func TestDiscoverOAuthParsesDoc(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"authorization_endpoint":"https://a/authorize","token_endpoint":"https://a/token","client_id":"cli-xyz"}`))
+		_, _ = w.Write([]byte(`{"authorization_endpoint":"https://a/authorize","token_endpoint":"https://a/token","client_id":"cli-xyz","graphql_endpoint":"https://api/graphql"}`))
 	}))
 	defer srv.Close()
 
@@ -23,7 +23,7 @@ func TestDiscoverOAuthParsesDoc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discoverOAuth: %v", err)
 	}
-	if doc.AuthorizationEndpoint != "https://a/authorize" || doc.TokenEndpoint != "https://a/token" || doc.ClientID != "cli-xyz" {
+	if doc.AuthorizationEndpoint != "https://a/authorize" || doc.TokenEndpoint != "https://a/token" || doc.ClientID != "cli-xyz" || doc.GraphqlEndpoint != "https://api/graphql" {
 		t.Fatalf("doc: %+v", doc)
 	}
 }

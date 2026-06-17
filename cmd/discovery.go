@@ -15,6 +15,7 @@ type oauthDiscovery struct {
 	TokenEndpoint               string `json:"token_endpoint"`
 	DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
 	ClientID                    string `json:"client_id"`
+	GraphqlEndpoint             string `json:"graphql_endpoint"`
 }
 
 func discoverOAuth(serverURL string) (oauthDiscovery, error) {

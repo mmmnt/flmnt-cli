@@ -86,7 +86,13 @@ func TestAuthHeaderFailsClosedWhenNotLoggedIn(t *testing.T) {
 func TestAuthHeaderDiscoversTokenEndpointAndRefreshes(t *testing.T) {
 	origLoad := authHeaderLoadToken
 	origStore := authHeaderStoreToken
-	defer func() { authHeaderLoadToken = origLoad; authHeaderStoreToken = origStore }()
+	origCfg := authHeaderLoadConfig
+	defer func() {
+		authHeaderLoadToken = origLoad
+		authHeaderStoreToken = origStore
+		authHeaderLoadConfig = origCfg
+	}()
+	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
 
 	var stored auth.TokenSet
 	authHeaderStoreToken = func(_ string, ts auth.TokenSet) error { stored = ts; return nil }

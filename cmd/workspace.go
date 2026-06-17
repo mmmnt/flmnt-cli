@@ -39,12 +39,15 @@ type userSearchResult struct {
 	DisplayName string `json:"displayName"`
 }
 
-func resolveGraphQLEndpoint(flag, env, serverURL string) string {
+func resolveGraphQLEndpoint(flag, env, discovered, serverURL string) string {
 	if flag != "" {
 		return flag
 	}
 	if env != "" {
 		return env
+	}
+	if discovered != "" {
+		return discovered
 	}
 	if serverURL == "" {
 		return ""
@@ -68,7 +71,14 @@ func workspaceClient(cmd *cobra.Command) (*apiclient.Client, error) {
 		}
 	}
 	flag, _ := cmd.Flags().GetString("graphql-endpoint")
-	endpoint := resolveGraphQLEndpoint(flag, envOr("FILAMENT_GRAPHQL_ENDPOINT", ""), serverURL)
+	env := envOr("FILAMENT_GRAPHQL_ENDPOINT", "")
+	discovered := ""
+	if flag == "" && env == "" && serverURL != "" {
+		if doc, derr := discoverOAuth(serverURL); derr == nil {
+			discovered = doc.GraphqlEndpoint
+		}
+	}
+	endpoint := resolveGraphQLEndpoint(flag, env, discovered, serverURL)
 	if endpoint == "" {
 		return nil, fmt.Errorf("--graphql-endpoint, FILAMENT_GRAPHQL_ENDPOINT, or a server URL is required")
 	}
