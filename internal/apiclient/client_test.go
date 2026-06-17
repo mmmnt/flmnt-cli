@@ -87,3 +87,19 @@ func TestMapWorkspaceError(t *testing.T) {
 		t.Fatal("unmapped errors should pass through unchanged")
 	}
 }
+
+func TestQueryUnwrapsFederatedRouterSubgraphError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":null,"errors":[{"message":"Failed to fetch from Subgraph 'account'.","extensions":{"errors":[{"message":"user_not_found: bob"}]}}]}`))
+	}))
+	defer srv.Close()
+
+	err := New(srv.URL, "tok").Query("query { x }", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "user_not_found") {
+		t.Fatalf("expected unwrapped subgraph error, got %v", err)
+	}
+	if mapped := MapWorkspaceError(err); mapped == nil || !strings.Contains(mapped.Error(), "no user found") {
+		t.Fatalf("unwrapped error should map to a friendly message, got %v", mapped)
+	}
+}

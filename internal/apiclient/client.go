@@ -55,7 +55,23 @@ type gqlRequest struct {
 }
 
 type gqlError struct {
-	Message string `json:"message"`
+	Message    string `json:"message"`
+	Extensions struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	} `json:"extensions"`
+}
+
+// gqlErrorMessage unwraps the federated-router envelope: when the Cosmo router
+// wraps a subgraph failure it reports "Failed to fetch from Subgraph 'x'" at the
+// top level and puts the real subgraph error under extensions.errors[]. Prefer
+// the nested message so MapWorkspaceError can recognize it.
+func gqlErrorMessage(e gqlError) string {
+	if len(e.Extensions.Errors) > 0 && e.Extensions.Errors[0].Message != "" {
+		return e.Extensions.Errors[0].Message
+	}
+	return e.Message
 }
 
 type gqlResponse struct {
@@ -90,7 +106,7 @@ func (c *Client) Query(query string, variables map[string]any, out any) error {
 		return fmt.Errorf("invalid graphql response: %w", err)
 	}
 	if len(envelope.Errors) > 0 {
-		return fmt.Errorf("graphql error: %s", envelope.Errors[0].Message)
+		return fmt.Errorf("graphql error: %s", gqlErrorMessage(envelope.Errors[0]))
 	}
 	if out == nil {
 		return nil
