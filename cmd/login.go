@@ -74,7 +74,7 @@ var loginCmd = &cobra.Command{
 				AuthURL:     authURL,
 				TokenURL:    tokenURL,
 				ClientID:    clientID,
-				RedirectURI: "http://127.0.0.1:9877",
+				RedirectURI: "http://127.0.0.1:9877/",
 			}, openInBrowser)
 			if err != nil {
 				return fmt.Errorf("login failed: %w", err)

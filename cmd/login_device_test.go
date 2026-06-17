@@ -99,6 +99,9 @@ func TestLoginPKCEDiscoversEndpointsAndSavesConfig(t *testing.T) {
 	if pkceCfg.AuthURL != "https://disc/authorize" || pkceCfg.TokenURL != "https://disc/token" || pkceCfg.ClientID != "cli-1" {
 		t.Fatalf("pkce cfg: %+v", pkceCfg)
 	}
+	if pkceCfg.RedirectURI != "http://127.0.0.1:9877/" {
+		t.Fatalf("redirect_uri must match the registered callback (trailing slash): %q", pkceCfg.RedirectURI)
+	}
 	if storedURL != "https://s" || stored.AccessToken != "acc" {
 		t.Fatalf("store: %s %+v", storedURL, stored)
 	}
