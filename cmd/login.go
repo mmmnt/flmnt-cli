@@ -11,7 +11,11 @@ import (
 
 var (
 	loginRunDeviceFlow = auth.RunDeviceFlow
+	loginRunPKCEFlow   = auth.RunPKCEFlow
 	loginStoreToken    = auth.StoreToken
+	loginDiscover      = discoverOAuth
+	loginLoadConfig    = auth.LoadConfig
+	loginSaveConfig    = auth.SaveConfig
 )
 
 var loginCmd = &cobra.Command{
@@ -26,15 +30,29 @@ var loginCmd = &cobra.Command{
 			return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
 		}
 
-		tokenURL, _ := cmd.Flags().GetString("token-url")
-		clientID, _ := cmd.Flags().GetString("client-id")
+		device, _ := cmd.Flags().GetBool("device")
+		flagAuth, _ := cmd.Flags().GetString("auth-url")
+		flagToken, _ := cmd.Flags().GetString("token-url")
+		flagClient, _ := cmd.Flags().GetString("client-id")
+		flagDevice, _ := cmd.Flags().GetString("device-url")
+		envClient := envOr("QUORUM_CLIENT_ID", "")
 
-		if device, _ := cmd.Flags().GetBool("device"); device {
-			deviceURL, _ := cmd.Flags().GetString("device-url")
+		cfg, _ := loginLoadConfig()
+		authURL, tokenURL, clientID := resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, oauthDiscovery{})
+		deviceURL := firstNonEmpty(flagDevice, envOr("QUORUM_DEVICE_URL", ""))
+
+		if tokenURL == "" || clientID == "" || (device && deviceURL == "") || (!device && authURL == "") {
+			doc, _ := loginDiscover(serverURL)
+			authURL, tokenURL, clientID = resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, doc)
+			deviceURL = firstNonEmpty(deviceURL, doc.DeviceAuthorizationEndpoint)
+		}
+
+		var tokens auth.TokenSet
+		if device {
 			if deviceURL == "" || tokenURL == "" || clientID == "" {
-				return fmt.Errorf("--device-url, --token-url and --client-id are required with --device")
+				return fmt.Errorf("--device-url, --token-url and --client-id are required with --device (and could not be discovered from %s)", serverURL)
 			}
-			tokens, err := loginRunDeviceFlow(auth.DeviceConfig{
+			t, err := loginRunDeviceFlow(auth.DeviceConfig{
 				DeviceURL: deviceURL,
 				TokenURL:  tokenURL,
 				ClientID:  clientID,
@@ -46,30 +64,32 @@ var loginCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("device login failed: %w", err)
 			}
-			if err := loginStoreToken(serverURL, tokens); err != nil {
-				return fmt.Errorf("storing token: %w", err)
+			tokens = t
+		} else {
+			if authURL == "" || tokenURL == "" || clientID == "" {
+				return fmt.Errorf("could not resolve OAuth endpoints from %s; pass --client-id (auth-url/token-url are discovered)", serverURL)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Token stored in OS keychain.")
-			return nil
+			fmt.Fprintln(cmd.OutOrStdout(), "Opening browser for authentication...")
+			t, err := loginRunPKCEFlow(auth.PKCEConfig{
+				AuthURL:     authURL,
+				TokenURL:    tokenURL,
+				ClientID:    clientID,
+				RedirectURI: "http://127.0.0.1:9877",
+			}, openInBrowser)
+			if err != nil {
+				return fmt.Errorf("login failed: %w", err)
+			}
+			tokens = t
 		}
 
-		authURL, _ := cmd.Flags().GetString("auth-url")
-		if authURL == "" || tokenURL == "" || clientID == "" {
-			return fmt.Errorf("--auth-url, --token-url and --client-id are required")
-		}
-		fmt.Fprintln(cmd.OutOrStdout(), "Opening browser for authentication...")
-		tokens, err := auth.RunPKCEFlow(auth.PKCEConfig{
-			AuthURL:     authURL,
-			TokenURL:    tokenURL,
-			ClientID:    clientID,
-			RedirectURI: "http://127.0.0.1:9877",
-		}, openInBrowser)
-		if err != nil {
-			return fmt.Errorf("login failed: %w", err)
-		}
 		if err := loginStoreToken(serverURL, tokens); err != nil {
 			return fmt.Errorf("storing token: %w", err)
 		}
+		cfg.ServerURL = serverURL
+		cfg.AuthURL = authURL
+		cfg.TokenURL = tokenURL
+		cfg.ClientID = clientID
+		_ = loginSaveConfig(cfg)
 		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Token stored in OS keychain.")
 		return nil
 	},
@@ -89,9 +109,9 @@ func openInBrowser(url string) error {
 }
 
 func init() {
-	loginCmd.Flags().String("server-url", "", "Quorum server URL")
-	loginCmd.Flags().String("auth-url", "", "OAuth2 authorization endpoint")
-	loginCmd.Flags().String("token-url", "", "OAuth2 token endpoint")
+	loginCmd.Flags().String("server-url", "", "Quorum/MCP server URL")
+	loginCmd.Flags().String("auth-url", "", "OAuth2 authorization endpoint (default: from discovery)")
+	loginCmd.Flags().String("token-url", "", "OAuth2 token endpoint (default: from discovery)")
 	loginCmd.Flags().String("client-id", "", "OAuth2 client ID")
 	loginCmd.Flags().Bool("device", false, "Use the device-authorization grant (headless, no browser)")
 	loginCmd.Flags().String("device-url", "", "Device-authorization endpoint (with --device)")

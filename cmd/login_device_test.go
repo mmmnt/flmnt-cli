@@ -24,13 +24,25 @@ func runLoginArgs(t *testing.T, args ...string) (stdout, stderr string, err erro
 	return out.String(), errb.String(), err
 }
 
+// stubLoginSeams isolates login from the network and the real config file.
+func stubLoginSeams(t *testing.T) {
+	t.Helper()
+	origDisc, origLoad, origSave := loginDiscover, loginLoadConfig, loginSaveConfig
+	loginDiscover = func(string) (oauthDiscovery, error) { return oauthDiscovery{}, nil }
+	loginLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
+	loginSaveConfig = func(auth.CLIConfig) error { return nil }
+	t.Cleanup(func() { loginDiscover = origDisc; loginLoadConfig = origLoad; loginSaveConfig = origSave })
+}
+
 func TestLoginDeviceRequiresDeviceURL(t *testing.T) {
+	stubLoginSeams(t)
 	if _, _, err := runLoginArgs(t, "--server-url", "https://s", "--device", "--token-url", "https://t", "--client-id", "c"); err == nil {
 		t.Fatal("expected error without --device-url")
 	}
 }
 
 func TestLoginDeviceStoresToken(t *testing.T) {
+	stubLoginSeams(t)
 	origRun := loginRunDeviceFlow
 	origStore := loginStoreToken
 	defer func() { loginRunDeviceFlow = origRun; loginStoreToken = origStore }()
@@ -58,5 +70,39 @@ func TestLoginDeviceStoresToken(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "AAAA-BBBB") || !strings.Contains(stdout, "https://verify") {
 		t.Fatalf("prompt output: %q", stdout)
+	}
+}
+
+func TestLoginPKCEDiscoversEndpointsAndSavesConfig(t *testing.T) {
+	stubLoginSeams(t)
+	origPKCE := loginRunPKCEFlow
+	origStore := loginStoreToken
+	defer func() { loginRunPKCEFlow = origPKCE; loginStoreToken = origStore }()
+
+	loginDiscover = func(string) (oauthDiscovery, error) {
+		return oauthDiscovery{AuthorizationEndpoint: "https://disc/authorize", TokenEndpoint: "https://disc/token"}, nil
+	}
+	var pkceCfg auth.PKCEConfig
+	loginRunPKCEFlow = func(cfg auth.PKCEConfig, _ func(string) error) (auth.TokenSet, error) {
+		pkceCfg = cfg
+		return auth.TokenSet{AccessToken: "acc"}, nil
+	}
+	var stored auth.TokenSet
+	var storedURL string
+	loginStoreToken = func(u string, ts auth.TokenSet) error { storedURL = u; stored = ts; return nil }
+	var saved auth.CLIConfig
+	loginSaveConfig = func(c auth.CLIConfig) error { saved = c; return nil }
+
+	if _, _, err := runLoginArgs(t, "--server-url", "https://s", "--client-id", "cli-1"); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if pkceCfg.AuthURL != "https://disc/authorize" || pkceCfg.TokenURL != "https://disc/token" || pkceCfg.ClientID != "cli-1" {
+		t.Fatalf("pkce cfg: %+v", pkceCfg)
+	}
+	if storedURL != "https://s" || stored.AccessToken != "acc" {
+		t.Fatalf("store: %s %+v", storedURL, stored)
+	}
+	if saved.ServerURL != "https://s" || saved.AuthURL != "https://disc/authorize" || saved.TokenURL != "https://disc/token" || saved.ClientID != "cli-1" {
+		t.Fatalf("saved: %+v", saved)
 	}
 }
