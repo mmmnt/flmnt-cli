@@ -4,6 +4,31 @@ The developer CLI for the [flmnt](https://flmnt.dev) event-stream memory platfor
 
 ## Install
 
+### Shell (macOS / Linux)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mmmnt/flmnt-cli/main/install.sh | sh
+```
+
+### PowerShell (Windows)
+
+```powershell
+irm https://raw.githubusercontent.com/mmmnt/flmnt-cli/main/install.ps1 | iex
+```
+
+### Homebrew
+
+```sh
+brew install mmmnt/tap/flmnt
+```
+
+### Scoop
+
+```sh
+scoop bucket add flmnt https://github.com/mmmnt/scoop-bucket
+scoop install flmnt
+```
+
 ### npm
 
 ```sh

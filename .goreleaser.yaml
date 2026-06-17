@@ -35,6 +35,30 @@ release:
     owner: mmmnt
     name: flmnt-cli
 
+brews:
+  - name: flmnt
+    repository:
+      owner: mmmnt
+      name: homebrew-tap
+      token: '{{ .Env.TAP_GITHUB_TOKEN }}'
+    homepage: 'https://flmnt.dev'
+    description: 'The developer CLI for the flmnt event-stream memory platform'
+    license: 'Apache-2.0'
+    install: |
+      bin.install "flmnt"
+    test: |
+      system "#{bin}/flmnt", "version"
+
+scoops:
+  - name: flmnt
+    repository:
+      owner: mmmnt
+      name: scoop-bucket
+      token: '{{ .Env.TAP_GITHUB_TOKEN }}'
+    homepage: 'https://flmnt.dev'
+    description: 'The developer CLI for the flmnt event-stream memory platform'
+    license: 'Apache-2.0'
+
 changelog:
   sort: asc
   filters:
