@@ -3,9 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
@@ -120,24 +117,8 @@ func resolveOAuthEndpoint(cmd *cobra.Command, serverURL string) (tokenURL, clien
 }
 
 func discoverTokenEndpoint(serverURL string) (string, error) {
-	u, err := url.Parse(serverURL)
+	doc, err := discoverOAuth(serverURL)
 	if err != nil {
-		return "", err
-	}
-	origin := u.Scheme + "://" + u.Host
-	resp, err := http.Get(origin + "/.well-known/oauth-authorization-server")
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("discovery returned %d", resp.StatusCode)
-	}
-	var doc struct {
-		TokenEndpoint string `json:"token_endpoint"`
-	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
 		return "", err
 	}
 	if doc.TokenEndpoint == "" {

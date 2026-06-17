@@ -14,6 +14,7 @@ type CLIConfig struct {
 	ActiveWorkspaceName string `json:"active_workspace_name,omitempty"`
 	ClientID            string `json:"client_id,omitempty"`
 	TokenURL            string `json:"token_url,omitempty"`
+	AuthURL             string `json:"auth_url,omitempty"`
 }
 
 func ConfigDir() (string, error) {
