@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+// importBatchSize bounds how many events ride in one /sync/import request. The
+// server replays Neo4j inline per event, so smaller batches stay well under the
+// upstream request timeout while keeping round-trips reasonable.
+const importBatchSize = 100
+
 // Endpoint is one side of a sync: an MCP base URL, a ready Authorization header
 // value (e.g. "Bearer <token>"), and the workspace id to scope to.
 type Endpoint struct {
@@ -137,22 +142,32 @@ func Run(c *Client, from, to Endpoint, cursors *CursorStore, dryRun bool, out io
 		return nil
 	}
 
-	var res importResponse
-	if err := c.post(to, "/sync/import", map[string]any{"streams": exp.Streams}, &res); err != nil {
-		return fmt.Errorf("import: %w", err)
-	}
-
-	for _, r := range res.Imported {
-		fmt.Fprintf(out, "  %-32s appended %d, skipped %d\n", r.StreamSuffix, r.Appended, r.Skipped)
-	}
-
-	// Advance cursors to each source stream's exported revision so re-runs skip
-	// what we've already moved. Import dedups by correlationId as the backstop.
+	// Import one stream at a time, in bounded batches. The server's import replays
+	// Neo4j inline per event, so a single huge request would blow the upstream
+	// timeout; chunking keeps each request fast. Dedup by correlationId on the
+	// server makes the chunks safe to re-send.
 	for _, s := range exp.Streams {
+		for start := 0; start < len(s.Events); start += importBatchSize {
+			end := start + importBatchSize
+			if end > len(s.Events) {
+				end = len(s.Events)
+			}
+			batch := StreamBatch{StreamSuffix: s.StreamSuffix, Events: s.Events[start:end]}
+			var res importResponse
+			if err := c.post(to, "/sync/import", map[string]any{"streams": []StreamBatch{batch}}, &res); err != nil {
+				return fmt.Errorf("import %s: %w", s.StreamSuffix, err)
+			}
+			for _, r := range res.Imported {
+				fmt.Fprintf(out, "  %-32s appended %d, skipped %d\n", r.StreamSuffix, r.Appended, r.Skipped)
+			}
+		}
+		// Advance this source stream's cursor only after all its batches landed, so
+		// re-runs skip what we've moved. Import dedups by correlationId as backstop.
 		if s.Revision > 0 {
 			cursors.Set(key, s.StreamSuffix, s.Revision)
 		}
 	}
+
 	if err := cursors.Save(); err != nil {
 		return fmt.Errorf("saving cursors: %w", err)
 	}

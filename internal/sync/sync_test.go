@@ -14,12 +14,15 @@ import (
 // fakeMCP stands in for an MCP server's /sync routes. It records what it received
 // and replies with canned export/import bodies.
 type fakeMCP struct {
-	srv          *httptest.Server
-	exportBody   string // JSON returned from /sync/export
-	gotExportReq map[string]any
-	gotImportReq map[string]any
-	gotAuth      string
-	gotWorkspace string
+	srv            *httptest.Server
+	exportBody     string // JSON returned from /sync/export
+	gotExportReq   map[string]any
+	gotImportReq   map[string]any
+	importCalls    int
+	importSizes    []int    // events received per /sync/import call
+	importSuffixes []string // stream suffixes received across all /sync/import calls
+	gotAuth        string
+	gotWorkspace   string
 }
 
 func newFakeMCP(t *testing.T, exportBody string) *fakeMCP {
@@ -40,10 +43,15 @@ func newFakeMCP(t *testing.T, exportBody string) *fakeMCP {
 				Streams []StreamBatch `json:"streams"`
 			}
 			_ = json.Unmarshal(raw, &body)
+			f.importCalls++
+			n := 0
 			imported := make([]map[string]any, 0, len(body.Streams))
 			for _, s := range body.Streams {
+				n += len(s.Events)
+				f.importSuffixes = append(f.importSuffixes, s.StreamSuffix)
 				imported = append(imported, map[string]any{"streamSuffix": s.StreamSuffix, "appended": len(s.Events), "skipped": 0})
 			}
+			f.importSizes = append(f.importSizes, n)
 			out, _ := json.Marshal(map[string]any{"project_id": "to-ws", "imported": imported})
 			_, _ = w.Write(out)
 		default:
@@ -106,17 +114,12 @@ func TestRunPassesStreamSuffixBatchesThroughUnchanged(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	streams, _ := to.gotImportReq["streams"].([]any)
-	if len(streams) != 2 {
-		t.Fatalf("expected 2 stream batches forwarded, got %d", len(streams))
-	}
 	suffixes := map[string]bool{}
-	for _, s := range streams {
-		m := s.(map[string]any)
-		suffixes[m["streamSuffix"].(string)] = true
+	for _, s := range to.importSuffixes {
+		suffixes[s] = true
 	}
 	if !suffixes["domain"] || !suffixes["sess-1::keyframe"] {
-		t.Fatalf("suffixes not preserved: %v", suffixes)
+		t.Fatalf("suffixes not preserved across import calls: %v (suffixes seen: %v)", suffixes, to.importSuffixes)
 	}
 }
 
@@ -183,6 +186,42 @@ func TestRunNoNewEventsIsANoOp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Nothing to sync") {
 		t.Fatalf("expected nothing-to-sync notice, got: %s", out.String())
+	}
+}
+
+func TestRunChunksLargeStreamImportsIntoBatches(t *testing.T) {
+	events := make([]map[string]any, 0, 150)
+	for i := 0; i < 150; i++ {
+		events = append(events, map[string]any{"correlationId": i})
+	}
+	body, _ := json.Marshal(map[string]any{
+		"project_id": "from-ws",
+		"streams":    []map[string]any{{"streamSuffix": "domain", "revision": 150, "events": events}},
+	})
+	from := newFakeMCP(t, string(body))
+	to := newFakeMCP(t, `{}`)
+
+	if err := Run(New(),
+		Endpoint{MCPURL: from.srv.URL, Workspace: "from-ws"},
+		Endpoint{MCPURL: to.srv.URL, Workspace: "to-ws"},
+		tmpCursors(t), false, &bytes.Buffer{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if to.importCalls != 2 {
+		t.Fatalf("expected 150 events to import in 2 batches, got %d calls (sizes %v)", to.importCalls, to.importSizes)
+	}
+	for _, n := range to.importSizes {
+		if n > importBatchSize {
+			t.Fatalf("a batch exceeded importBatchSize=%d: sizes %v", importBatchSize, to.importSizes)
+		}
+	}
+	total := 0
+	for _, n := range to.importSizes {
+		total += n
+	}
+	if total != 150 {
+		t.Fatalf("expected all 150 events imported, got %d", total)
 	}
 }
 
