@@ -359,7 +359,7 @@ func init() {
 		workspaceDeleteCmd, workspaceMembersCmd, workspaceAddMemberCmd, workspaceRemoveMemberCmd,
 	}
 	for _, c := range subs {
-		c.Flags().String("server-url", "", "Quorum server URL")
+		c.Flags().String("server-url", "", "flmnt server URL")
 		c.Flags().String("graphql-endpoint", "", "flmnt GraphQL endpoint")
 	}
 	workspaceDeleteCmd.Flags().BoolP("yes", "y", false, "Confirm deletion")

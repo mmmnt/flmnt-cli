@@ -20,15 +20,14 @@ const (
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
-	Short: "Sync Quorum event data between your local and the remote (staging) workspace",
-	Long: "Move Quorum training data through the MCP /sync routes. push sends local -> remote, " +
-		"pull brings remote -> local. The transfer is incremental (per-stream cursors in " +
-		"~/.filament) and idempotent (the server dedups by correlationId), so it is safe to re-run.",
+	Short: "Sync your data between local and remote workspaces",
+	Long: "Move your data between local and remote workspaces. push sends local to remote; " +
+		"pull brings remote to local. Transfers are incremental and safe to re-run.",
 }
 
 var syncPushCmd = &cobra.Command{
 	Use:           "push",
-	Short:         "Sync local Quorum data up to the remote (staging) workspace",
+	Short:         "Sync your local data up to the remote workspace",
 	SilenceUsage:  true,
 	SilenceErrors: false,
 	RunE:          func(cmd *cobra.Command, args []string) error { return runSync(cmd, true) },
@@ -36,7 +35,7 @@ var syncPushCmd = &cobra.Command{
 
 var syncPullCmd = &cobra.Command{
 	Use:           "pull",
-	Short:         "Sync remote (staging) Quorum data down to your local workspace",
+	Short:         "Sync data from the remote workspace down to local",
 	SilenceUsage:  true,
 	SilenceErrors: false,
 	RunE:          func(cmd *cobra.Command, args []string) error { return runSync(cmd, false) },

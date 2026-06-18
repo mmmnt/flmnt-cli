@@ -10,7 +10,7 @@ import (
 
 var healthCmd = &cobra.Command{
 	Use:   "health",
-	Short: "Check health of Core, Engine, and proxy services",
+	Short: "Check the health of local flmnt services",
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := health.Config{
 			CoreURL:   envOr("CORE_URL", "http://localhost:3000"),

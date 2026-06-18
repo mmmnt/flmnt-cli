@@ -29,7 +29,7 @@ var authHeaderCmd = &cobra.Command{
 func runAuthHeader(cmd *cobra.Command, args []string) error {
 	serverURL := resolveAuthServerURL(cmd)
 	if serverURL == "" {
-		return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or quorum setup must provide a server URL")
+		return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or flmnt setup must provide a server URL")
 	}
 	tokenURL, clientID, err := resolveOAuthEndpoint(cmd, serverURL)
 	if err != nil {
@@ -128,7 +128,7 @@ func discoverTokenEndpoint(serverURL string) (string, error) {
 }
 
 func init() {
-	authHeaderCmd.Flags().String("server-url", "", "Quorum/MCP server URL")
+	authHeaderCmd.Flags().String("server-url", "", "flmnt MCP server URL")
 	authHeaderCmd.Flags().String("token-url", "", "OAuth2 token endpoint (default: from MCP discovery)")
 	authHeaderCmd.Flags().String("client-id", "", "OAuth2 client ID")
 	authHeaderCmd.Flags().String("workspace", "", "Workspace id (default: active workspace from `flmnt workspace use`)")
