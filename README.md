@@ -48,18 +48,12 @@ Prebuilt binaries for macOS, Linux, and Windows (amd64/arm64) are attached to ea
 ## Usage
 
 ```sh
+flmnt help                       # for a list of flmnt commands
+flmnt <command> -h               # for detailed help on a command
 flmnt login                      # authenticate (OAuth2 device or browser)
 flmnt workspace list             # list workspaces you own or share
 flmnt workspace use <name|id>    # set the active workspace
 flmnt mcp auth-header            # print MCP auth headers for .mcp.json headersHelper
-```
-
-Wire the CLI into an MCP client via `.mcp.json`:
-
-```json
-{
-  "headersHelper": "flmnt mcp auth-header --server-url https://mcp.<env>.flmnt.dev"
-}
 ```
 
 ## License
