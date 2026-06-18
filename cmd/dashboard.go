@@ -9,7 +9,7 @@ import (
 
 var dashboardCmd = &cobra.Command{
 	Use:   "dashboard",
-	Short: "Open the Quorum dashboard in a browser",
+	Short: "Open the flmnt dashboard in a browser",
 	Run: func(cmd *cobra.Command, args []string) {
 		url := browser.ResolveURL()
 		fmt.Fprintf(cmd.OutOrStdout(), "Opening %s\n", url)

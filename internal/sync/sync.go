@@ -129,13 +129,13 @@ func Run(c *Client, from, to Endpoint, cursors *CursorStore, dryRun bool, out io
 
 	plan := Plan{Streams: exp.Streams}
 	if plan.Total() == 0 {
-		fmt.Fprintln(out, "Nothing to sync — source has no new events.")
+		fmt.Fprintln(out, "Nothing to sync — already up to date.")
 		return nil
 	}
 
-	fmt.Fprintf(out, "Will move %d event(s) across %d stream(s):\n", plan.Total(), len(plan.Streams))
+	fmt.Fprintf(out, "Will move %d record(s) across %d collection(s):\n", plan.Total(), len(plan.Streams))
 	for _, s := range plan.Streams {
-		fmt.Fprintf(out, "  %-32s %d event(s)\n", s.StreamSuffix, len(s.Events))
+		fmt.Fprintf(out, "  %-32s %d record(s)\n", s.StreamSuffix, len(s.Events))
 	}
 	if dryRun {
 		fmt.Fprintln(out, "(dry run — nothing written)")

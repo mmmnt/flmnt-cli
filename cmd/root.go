@@ -11,7 +11,7 @@ var version = "dev"
 var rootCmd = &cobra.Command{
 	Use:   "flmnt",
 	Short: "flmnt developer CLI",
-	Long:  "flmnt is the developer CLI for the flmnt event-stream memory platform. Manages authentication, workspaces, and developer tooling.",
+	Long:  "flmnt is the developer CLI for the flmnt platform. Manages authentication, workspaces, and developer tooling.",
 }
 
 var versionCmd = &cobra.Command{

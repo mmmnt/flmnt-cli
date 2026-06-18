@@ -20,7 +20,7 @@ var (
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Authenticate with Quorum via OAuth2 (browser PKCE, or --device for headless)",
+	Short: "Authenticate with flmnt via OAuth2 (browser PKCE, or --device for headless)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		if serverURL == "" {
@@ -109,7 +109,7 @@ func openInBrowser(url string) error {
 }
 
 func init() {
-	loginCmd.Flags().String("server-url", "", "Quorum/MCP server URL")
+	loginCmd.Flags().String("server-url", "", "flmnt MCP server URL")
 	loginCmd.Flags().String("auth-url", "", "OAuth2 authorization endpoint (default: from discovery)")
 	loginCmd.Flags().String("token-url", "", "OAuth2 token endpoint (default: from discovery)")
 	loginCmd.Flags().String("client-id", "", "OAuth2 client ID")

@@ -12,7 +12,7 @@ import (
 var proxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Run the local MCP proxy daemon",
-	Long: `Starts a local reverse proxy that reads the Quorum token from the OS keychain
+	Long: `Starts a local reverse proxy that reads your stored token from the OS keychain
 and injects Authorization: Bearer headers on outbound MCP requests.
 .mcp.json should point to http://localhost:PROXY_PORT/mcp.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -27,11 +27,11 @@ and injects Authorization: Bearer headers on outbound MCP requests.
 			}
 		}
 		if serverURL == "" {
-			return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or quorum setup must provide a server URL")
+			return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or flmnt setup must provide a server URL")
 		}
 
 		addr := fmt.Sprintf(":%d", port)
-		fmt.Fprintf(cmd.OutOrStdout(), "Quorum proxy listening on %s → %s\n", addr, serverURL)
+		fmt.Fprintf(cmd.OutOrStdout(), "flmnt proxy listening on %s → %s\n", addr, serverURL)
 
 		return proxy.ListenAndServe(addr, proxy.Config{
 			TargetURL: serverURL,
@@ -48,6 +48,6 @@ and injects Authorization: Bearer headers on outbound MCP requests.
 
 func init() {
 	proxyCmd.Flags().Int("port", 9876, "Port to listen on")
-	proxyCmd.Flags().String("server-url", "", "Quorum server URL")
+	proxyCmd.Flags().String("server-url", "", "flmnt server URL")
 	rootCmd.AddCommand(proxyCmd)
 }
