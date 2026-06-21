@@ -38,7 +38,7 @@ type Attachment struct {
 // type/path of a file-writing tool (create/update).
 type ToolUseResult struct {
 	ExitCode *int   `json:"exitCode"`
-	Type     string `json:"type"`     // "create" | "update" for file-writing tools
+	Type     string `json:"type"` // "create" | "update" for file-writing tools
 	FilePath string `json:"filePath"`
 }
 

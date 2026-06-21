@@ -23,9 +23,9 @@ type Provenance struct {
 // Candidate is one nominated unit of reasoning memory — pre-LLM-judgment, pre-write.
 type Candidate struct {
 	Kind       Kind       `json:"kind"`
-	LocalID    string     `json:"local_id"`              // stable within a run; basis for causal_refs
-	Title      string     `json:"title"`                 // rule-derived; the LLM refines in Phase 2
-	Text       string     `json:"text,omitempty"`        // raw source text (user msg / commit body)
+	LocalID    string     `json:"local_id"`       // stable within a run; basis for causal_refs
+	Title      string     `json:"title"`          // rule-derived; the LLM refines in Phase 2
+	Text       string     `json:"text,omitempty"` // raw source text (user msg / commit body)
 	Timestamp  string     `json:"timestamp,omitempty"`
 	CausalRefs []string   `json:"causal_refs,omitempty"` // local_ids of predecessors (filled in correlate)
 	Confidence string     `json:"confidence,omitempty"`  // filled in provenance phase

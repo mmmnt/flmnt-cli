@@ -8,8 +8,8 @@ func TestRefineDropsNoiseAndDups(t *testing.T) {
 		Branch:    "main",
 		Candidates: []Candidate{
 			{Kind: KindKeyframe, LocalID: "s:keyframe"},
-			{Kind: KindDecision, LocalID: "d1", Text: "[Image #7] paste the verification code into the box"},      // noise
-			{Kind: KindDecision, LocalID: "d2", Text: "Use the new token store and set SameSite=strict cookies."}, // keep
+			{Kind: KindDecision, LocalID: "d1", Text: "[Image #7] paste the verification code into the box"},       // noise
+			{Kind: KindDecision, LocalID: "d2", Text: "Use the new token store and set SameSite=strict cookies."},  // keep
 			{Kind: KindDecision, LocalID: "d3", Text: "use the NEW token store  and set samesite=strict cookies."}, // dup of d2 (normalized)
 			{Kind: KindCommit, LocalID: "c1", Provenance: Provenance{CommitSHAs: []string{"abc"}}},
 			{Kind: KindCommit, LocalID: "c2", Provenance: Provenance{CommitSHAs: []string{"abc"}}}, // dup sha
