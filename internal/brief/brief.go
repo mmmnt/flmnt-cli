@@ -46,13 +46,26 @@ func (cfg Config) client() *http.Client {
 	return &http.Client{Timeout: 8 * time.Second}
 }
 
+// baseURL normalizes the endpoint to the host the REST read routes live on, stripping a trailing
+// /mcp or /sse — mirroring the writer's syncBaseURL so brief and sync/import agree on the base.
+func (cfg Config) baseURL() string {
+	s := strings.TrimRight(cfg.Endpoint, "/")
+	for _, suf := range []string{"/mcp", "/sse"} {
+		s = strings.TrimSuffix(s, suf)
+	}
+	return strings.TrimRight(s, "/")
+}
+
 func (cfg Config) get(path string, out any) error {
-	req, err := http.NewRequest(http.MethodGet, cfg.Endpoint+path, nil)
+	req, err := http.NewRequest(http.MethodGet, cfg.baseURL()+path, nil)
 	if err != nil {
 		return err
 	}
 	if cfg.AuthHeader != "" {
 		req.Header.Set("Authorization", cfg.AuthHeader)
+	}
+	if cfg.ProjectID != "" {
+		req.Header.Set("X-Workspace-Id", cfg.ProjectID) // the remote proxy requires workspace selection
 	}
 	resp, err := cfg.client().Do(req)
 	if err != nil {

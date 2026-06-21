@@ -175,6 +175,9 @@ func (w *Writer) postImport(body map[string]any) ([]importResult, error) {
 	if w.AuthHeader != "" {
 		req.Header.Set("Authorization", w.AuthHeader)
 	}
+	if w.ProjectID != "" {
+		req.Header.Set("X-Workspace-Id", w.ProjectID) // the remote proxy requires workspace selection
+	}
 	resp, err := w.client().Do(req)
 	if err != nil {
 		return nil, err
