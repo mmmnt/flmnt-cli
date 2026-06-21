@@ -17,7 +17,7 @@ var setupCmd = &cobra.Command{
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		proxyPort, _ := cmd.Flags().GetInt("proxy-port")
 
-		gateCmd, err := resolveGateCmd()
+		flmntCmd, err := resolveGateCmd()
 		if err != nil {
 			return fmt.Errorf("cannot locate flmnt binary: %w", err)
 		}
@@ -25,16 +25,20 @@ var setupCmd = &cobra.Command{
 		cfg := setup.Config{
 			ServerURL: serverURL,
 			ProxyPort: proxyPort,
-			GateCmd:   gateCmd + " gate",
+			GateCmd:   flmntCmd + " gate",
+			BriefCmd:  flmntCmd + " brief",
+			DeriveCmd: flmntCmd + " derive --hook",
 		}
 
 		if err := setup.Run(cfg); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Setup complete.\n")
+		fmt.Fprintf(cmd.OutOrStdout(), "Setup complete — continuity loop wired.\n")
 		fmt.Fprintf(cmd.OutOrStdout(), "  .mcp.json          → http://localhost:%d/mcp\n", proxyPort)
-		fmt.Fprintf(cmd.OutOrStdout(), "  settings.local.json → UserPromptSubmit: %s gate\n", gateCmd)
+		fmt.Fprintf(cmd.OutOrStdout(), "  UserPromptSubmit   → %s gate\n", flmntCmd)
+		fmt.Fprintf(cmd.OutOrStdout(), "  SessionStart       → %s brief         (inject project memory)\n", flmntCmd)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Stop               → %s derive --hook (capture the session)\n", flmntCmd)
 		return nil
 	},
 }

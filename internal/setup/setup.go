@@ -10,7 +10,9 @@ import (
 type Config struct {
 	ServerURL string
 	ProxyPort int
-	GateCmd   string
+	GateCmd   string // UserPromptSubmit: context-recency nudge
+	BriefCmd  string // SessionStart: inject the project's reasoning state (read half of the loop)
+	DeriveCmd string // Stop: derive + import the finished session (write half of the loop)
 	Dir       string // project root; defaults to cwd
 }
 
@@ -118,18 +120,18 @@ func writeSettingsLocalJSON(dir string, cfg Config) error {
 	}
 	path := filepath.Join(claudeDir, "settings.local.json")
 
-	settings := settingsFile{
-		Hooks: map[string][]hookMatcher{
-			"UserPromptSubmit": {
-				{
-					Matcher: "",
-					Hooks: []hookEntry{
-						{Type: "command", Command: cfg.GateCmd},
-					},
-				},
-			},
-		},
+	hooks := map[string][]hookMatcher{
+		"UserPromptSubmit": {{Matcher: "", Hooks: []hookEntry{{Type: "command", Command: cfg.GateCmd}}}},
 	}
+	// The continuity loop: SessionStart injects the project's reasoning state; Stop derives the
+	// finished session back into flmnt. Both fail quiet, so they never disrupt a session.
+	if cfg.BriefCmd != "" {
+		hooks["SessionStart"] = []hookMatcher{{Matcher: "", Hooks: []hookEntry{{Type: "command", Command: cfg.BriefCmd}}}}
+	}
+	if cfg.DeriveCmd != "" {
+		hooks["Stop"] = []hookMatcher{{Matcher: "", Hooks: []hookEntry{{Type: "command", Command: cfg.DeriveCmd}}}}
+	}
+	settings := settingsFile{Hooks: hooks}
 
 	// Preserve existing keys if file already exists
 	if existing, err := os.ReadFile(path); err == nil {
