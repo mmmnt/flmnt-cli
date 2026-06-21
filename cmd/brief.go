@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/mmmnt/flmnt-cli/internal/brief"
 	"github.com/spf13/cobra"
@@ -21,10 +22,8 @@ func runBrief(cmd *cobra.Command, args []string) error {
 	if serverURL == "" {
 		return nil // not configured — stay quiet
 	}
-	project, _ := cmd.Flags().GetString("project")
-	if project == "" {
-		project = resolveActiveWorkspace(cmd)
-	}
+	cwd, _ := os.Getwd()
+	project := resolveProject(cmd, cwd)
 	if project == "" {
 		return nil
 	}
@@ -42,6 +41,6 @@ func runBrief(cmd *cobra.Command, args []string) error {
 
 func init() {
 	briefCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; localhost for a local stack)")
-	briefCmd.Flags().String("project", "", "Quorum project id (default: active workspace)")
+	briefCmd.Flags().String("project", "", "flmnt project id (default: active workspace)")
 	rootCmd.AddCommand(briefCmd)
 }

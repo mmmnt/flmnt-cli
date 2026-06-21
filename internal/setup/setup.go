@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	ServerURL string
+	ProjectID string // per-repo flmnt project written to the repo config (optional)
 	ProxyPort int
 	GateCmd   string // UserPromptSubmit: context-recency nudge
 	BriefCmd  string // SessionStart: inject the project's reasoning state (read half of the loop)
@@ -18,6 +19,7 @@ type Config struct {
 
 type ProjectConfig struct {
 	ServerURL string `json:"server_url"`
+	ProjectID string `json:"project_id,omitempty"` // per-repo flmnt project; derive/brief scope to it
 }
 
 type mcpServer struct {
@@ -67,7 +69,7 @@ func Run(cfg Config) error {
 
 func writeProjectConfig(dir string, cfg Config) error {
 	path := filepath.Join(dir, ".quorum.json")
-	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL})
+	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID})
 }
 
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {

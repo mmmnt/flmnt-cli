@@ -116,7 +116,7 @@ func runWrite(cmd *cobra.Command, proj derive.Project, sessions []string) error 
 	sessFilter, _ := cmd.Flags().GetString("session")
 	force, _ := cmd.Flags().GetBool("force")
 
-	w, err := buildWriter(cmd)
+	w, err := buildWriter(cmd, proj.Cwd)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func runHook(cmd *cobra.Command) error {
 	if err != nil || len(recs) == 0 {
 		return nil
 	}
-	w, err := buildWriter(cmd)
+	w, err := buildWriter(cmd, payload.Cwd)
 	if err != nil {
 		return nil // not configured (no login/project) — stay quiet
 	}
@@ -188,20 +188,17 @@ func runHook(cmd *cobra.Command) error {
 // buildWriter resolves the write endpoint (like `sync`: --server-url / QUORUM_SERVER_URL / login
 // config; prod by default, localhost for devs), best-effort Bearer, and project (active workspace
 // unless --project). Core is never targeted directly — writes go through the public /sync/import route.
-func buildWriter(cmd *cobra.Command) (*derive.Writer, error) {
+func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 	out := cmd.OutOrStdout()
-	project, _ := cmd.Flags().GetString("project")
 	writerDry, _ := cmd.Flags().GetBool("writer-dry-run")
 
 	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
 		return nil, fmt.Errorf("no server URL: run `flmnt login`, set QUORUM_SERVER_URL, or pass --server-url (e.g. http://localhost:3000 for a local stack)")
 	}
+	project := resolveProject(cmd, repoDir)
 	if project == "" {
-		project = resolveActiveWorkspace(cmd)
-	}
-	if project == "" {
-		return nil, fmt.Errorf("no project: pass --project or select an active workspace (`flmnt workspace use`)")
+		return nil, fmt.Errorf("no project: pass --project, set project_id in .quorum.json (`flmnt setup --project`), or select an active workspace")
 	}
 	return &derive.Writer{
 		Endpoint:   serverURL,
@@ -246,7 +243,7 @@ func init() {
 	deriveCmd.Flags().String("out", "", "Write candidate JSONL to this path (one SessionDerivation per line)")
 	deriveCmd.Flags().Bool("write", false, "Write derived candidates to flmnt via the /sync/import route (Phase 3)")
 	deriveCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; pass http://localhost:3000 for a local stack)")
-	deriveCmd.Flags().String("project", "", "Quorum project id to write into (default: active workspace)")
+	deriveCmd.Flags().String("project", "", "flmnt project id to write into (default: active workspace)")
 	deriveCmd.Flags().String("session", "", "Restrict to one main session (id prefix)")
 	deriveCmd.Flags().Bool("writer-dry-run", false, "With --write: print the import payload instead of sending it")
 	deriveCmd.Flags().Bool("hook", false, "Stop-hook mode: read the hook JSON from stdin and derive+import that one session (fails quiet)")
