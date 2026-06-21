@@ -1,0 +1,47 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/mmmnt/flmnt-cli/internal/brief"
+	"github.com/spf13/cobra"
+)
+
+var briefCmd = &cobra.Command{
+	Use:   "brief",
+	Short: "SessionStart briefing — inject the project's current reasoning state from flmnt",
+	Long: "Reads the latest keyframe + recent decisions + recent mistakes for the active project and\n" +
+		"prints a compact briefing for a SessionStart hook to inject — the read half of the continuity\n" +
+		"loop. Read-only; fails quiet (prints nothing) when there's no memory or no config.",
+	RunE: runBrief,
+}
+
+func runBrief(cmd *cobra.Command, args []string) error {
+	serverURL := resolveRemoteServerURL(cmd)
+	if serverURL == "" {
+		return nil // not configured — stay quiet
+	}
+	project, _ := cmd.Flags().GetString("project")
+	if project == "" {
+		project = resolveActiveWorkspace(cmd)
+	}
+	if project == "" {
+		return nil
+	}
+	text, err := brief.Render(brief.Config{
+		Endpoint:   serverURL,
+		ProjectID:  project,
+		AuthHeader: bestEffortBearer(cmd, serverURL),
+	})
+	if err != nil || text == "" {
+		return nil
+	}
+	fmt.Fprint(cmd.OutOrStdout(), text)
+	return nil
+}
+
+func init() {
+	briefCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; localhost for a local stack)")
+	briefCmd.Flags().String("project", "", "Quorum project id (default: active workspace)")
+	rootCmd.AddCommand(briefCmd)
+}

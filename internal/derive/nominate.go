@@ -56,35 +56,98 @@ func NominateSession(repo string, recs []Record) SessionDerivation {
 				Provenance: Provenance{SessionID: sid, Branch: sum.GitBranch, UUIDs: nz(r.UUID), Files: r.EditedFiles()},
 			})
 		default:
+			// User messages are a DEMOTED decision source (commits + plans are primary). Only clearly
+			// directive messages count; questions, observations, corrections, and injected meta are not
+			// decisions. This keeps the high-precision signal the brief surfaces.
 			txt := r.UserText()
-			if len(txt) < decisionMinLen || strings.HasPrefix(strings.TrimSpace(txt), "/") {
+			if len(txt) < decisionMinLen || isMeta(txt) || strings.HasPrefix(strings.TrimSpace(txt), "/") {
 				continue
 			}
-			kind, title := KindDecision, "Direction-setting message"
-			if hasCorrectionMarker(txt) {
-				kind, title = KindMistake, "User correction"
+			if isCorrection(txt) {
+				d.Candidates = append(d.Candidates, userCandidate(sid, sum.GitBranch, r, KindMistake, "User correction", txt))
+				continue
 			}
-			d.Candidates = append(d.Candidates, Candidate{
-				Kind:       kind,
-				LocalID:    localID(sid, "user", r.UUID),
-				Title:      title,
-				Text:       truncate(txt, 1000),
-				Timestamp:  r.Timestamp,
-				Provenance: Provenance{SessionID: sid, Branch: sum.GitBranch, UUIDs: nz(r.UUID)},
-			})
+			if !isDirective(txt) {
+				continue // a question or observation — not a decision
+			}
+			d.Candidates = append(d.Candidates, userCandidate(sid, sum.GitBranch, r, KindDecision, "Direction-setting message", txt))
 		}
 	}
 	return d
 }
 
-func hasCorrectionMarker(s string) bool {
-	low := strings.ToLower(s)
-	for _, m := range correctionMarkers {
-		if strings.Contains(low, m) {
+// metaPrefixes mark injected/system content that is never a decision (compaction summaries,
+// system reminders, interrupt notices, pasted images).
+var metaPrefixes = []string{
+	"this session is being continued",
+	"caveat:",
+	"<system-reminder>",
+	"<task-notification>",
+	"[system notification",
+	"[request interrupted",
+	"[image",
+}
+
+// metaContains marks injected/system content even when it isn't the leading text.
+var metaContains = []string{"<system-reminder>", "<task-notification>", "[system notification"}
+
+func isMeta(s string) bool {
+	t := strings.ToLower(strings.TrimSpace(s))
+	for _, p := range metaPrefixes {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	for _, m := range metaContains {
+		if strings.Contains(t, m) {
 			return true
 		}
 	}
 	return false
+}
+
+// isCorrection requires a correction marker as the message's PRIMARY intent (in the first 80 chars),
+// not buried somewhere in a long body (which caused summaries to be miscategorized as mistakes).
+func isCorrection(s string) bool {
+	head := strings.ToLower(strings.TrimSpace(s))
+	if len(head) > 80 {
+		head = head[:80]
+	}
+	for _, m := range correctionMarkers {
+		if strings.Contains(head, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// questionStarts begin an inquiry, not a direction.
+var questionStarts = []string{"why ", "what ", "how ", "when ", "who ", "where ", "does ", "do ",
+	"can ", "could ", "should ", "is ", "are ", "will ", "would ", "did "}
+
+// isDirective is true for substantive non-question messages (a direction, not an inquiry).
+func isDirective(s string) bool {
+	t := strings.ToLower(strings.TrimSpace(s))
+	if strings.HasSuffix(t, "?") {
+		return false
+	}
+	for _, q := range questionStarts {
+		if strings.HasPrefix(t, q) {
+			return false
+		}
+	}
+	return true
+}
+
+func userCandidate(sid, branch string, r Record, kind Kind, title, txt string) Candidate {
+	return Candidate{
+		Kind:       kind,
+		LocalID:    localID(sid, "user", r.UUID),
+		Title:      title,
+		Text:       truncate(txt, 1000),
+		Timestamp:  r.Timestamp,
+		Provenance: Provenance{SessionID: sid, Branch: branch, UUIDs: nz(r.UUID)},
+	}
 }
 
 func localID(parts ...string) string { return strings.Join(parts, ":") }
