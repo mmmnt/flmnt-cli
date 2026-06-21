@@ -16,15 +16,17 @@ import (
 var deriveCmd = &cobra.Command{
 	Use:   "derive",
 	Short: "Derive structured reasoning memory from Claude Code history + git",
-	Long: "Reads local Claude Code session transcripts (and, later, git history) and derives\n" +
-		"decisions, mistakes, and keyframes into flmnt — closing the continuity loop so each\n" +
-		"session builds on the last.\n\n" +
-		"This build implements --dry-run only: a read-only inventory of what would be derived.",
+	Long: "Reads local Claude Code session transcripts + git history and derives decisions,\n" +
+		"mistakes, and keyframes into flmnt — closing the continuity loop so each session builds\n" +
+		"on the last. Default: a read-only inventory. --write imports; --hook is the Stop-hook entry.",
 	RunE: runDerive,
 }
 
 func runDerive(cmd *cobra.Command, args []string) error {
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	if hook, _ := cmd.Flags().GetBool("hook"); hook {
+		return runHook(cmd)
+	}
+
 	repo, _ := cmd.Flags().GetString("repo")
 	if repo == "" {
 		wd, err := os.Getwd()
@@ -32,9 +34,6 @@ func runDerive(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		repo = wd
-	}
-	if !dryRun {
-		return fmt.Errorf("only --dry-run is implemented in this build")
 	}
 
 	proj, found, err := derive.ProjectForRepo(repo)
@@ -110,41 +109,27 @@ func runDerive(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// runWrite derives each (optionally filtered) session and writes its candidates to a flmnt core,
-// wiring causal edges. Used for the Phase-3 local validation.
+// runWrite derives each (optionally filtered) session and imports its candidates into flmnt.
+// Backfill skips cursor-processed sessions (unless --force / --session / --writer-dry-run).
 func runWrite(cmd *cobra.Command, proj derive.Project, sessions []string) error {
 	out := cmd.OutOrStdout()
-	project, _ := cmd.Flags().GetString("project")
 	sessFilter, _ := cmd.Flags().GetString("session")
-	writerDry, _ := cmd.Flags().GetBool("writer-dry-run")
+	force, _ := cmd.Flags().GetBool("force")
 
-	// Resolve the write endpoint the SAME way `sync` does: --server-url / QUORUM_SERVER_URL /
-	// login config. Defaults to the login-configured server (prod for users); devs override to a
-	// local stack. Core is never targeted directly — writes go through the public /sync/import route.
-	serverURL := resolveRemoteServerURL(cmd)
-	if serverURL == "" {
-		return fmt.Errorf("no server URL: run `flmnt login`, set QUORUM_SERVER_URL, or pass --server-url (e.g. http://localhost:3000 for a local stack)")
+	w, err := buildWriter(cmd)
+	if err != nil {
+		return err
 	}
-	authHeader := bestEffortBearer(cmd, serverURL)
-	if project == "" {
-		project = resolveActiveWorkspace(cmd)
-	}
-	if project == "" {
-		return fmt.Errorf("no project: pass --project or select an active workspace (`flmnt workspace use`)")
-	}
+	fmt.Fprintf(out, "Writing to %s  project=%s  authed=%v  writer-dry-run=%v\n\n", w.Endpoint, w.ProjectID, w.AuthHeader != "", w.DryRun)
 
-	w := &derive.Writer{
-		Endpoint:   serverURL,
-		ProjectID:  project,
-		AuthHeader: authHeader,
-		DryRun:     writerDry,
-		Log:        func(s string) { fmt.Fprintln(out, s) },
-	}
-	fmt.Fprintf(out, "Writing to %s  project=%s  authed=%v  writer-dry-run=%v\n\n", serverURL, project, authHeader != "", writerDry)
-
+	cur := derive.LoadCursor()
 	byKind := map[derive.Kind]int{}
-	var totA, totS, n int
+	var totA, totS, n, curSkipped int
 	for _, s := range sessions {
+		if sessFilter == "" && !force && !w.DryRun && cur.Done(s) {
+			curSkipped++
+			continue
+		}
 		recs, perr := derive.ParseSession(s)
 		if perr != nil {
 			continue
@@ -153,20 +138,78 @@ func runWrite(cmd *cobra.Command, proj derive.Project, sessions []string) error 
 		if sessFilter != "" && !strings.HasPrefix(der.SessionID, sessFilter) {
 			continue
 		}
-		res, err := w.WriteSession(der)
-		if err != nil {
-			return fmt.Errorf("session %s: %w", der.SessionID, err)
+		res, werr := w.WriteSession(der)
+		if werr != nil {
+			return fmt.Errorf("session %s: %w", der.SessionID, werr)
 		}
 		totA += res.Appended
 		totS += res.Skipped
 		for k, v := range res.ByKind {
 			byKind[k] += v
 		}
+		if !w.DryRun {
+			cur.Mark(s)
+		}
 		fmt.Fprintf(out, "  %s: appended %d, skipped %d\n", short8(der.SessionID), res.Appended, res.Skipped)
 		n++
 	}
-	fmt.Fprintf(out, "\nDone: %d sessions · %d appended · %d skipped (idempotent re-import)\nBy kind (candidates): %v\n", n, totA, totS, byKind)
+	if !w.DryRun {
+		_ = cur.Save()
+	}
+	fmt.Fprintf(out, "\nDone: %d sessions written · %d cursor-skipped · %d appended · %d skipped (idempotent)\nBy kind: %v\n",
+		n, curSkipped, totA, totS, byKind)
 	return nil
+}
+
+// runHook is the Stop-hook entry: reads the hook JSON from stdin (transcript_path + cwd), derives
+// that one session, and imports it. Fails QUIET — a hook must never block or noise the session.
+func runHook(cmd *cobra.Command) error {
+	var payload struct {
+		SessionID      string `json:"session_id"`
+		TranscriptPath string `json:"transcript_path"`
+		Cwd            string `json:"cwd"`
+	}
+	if err := json.NewDecoder(os.Stdin).Decode(&payload); err != nil || payload.TranscriptPath == "" {
+		return nil
+	}
+	recs, err := derive.ParseSession(payload.TranscriptPath)
+	if err != nil || len(recs) == 0 {
+		return nil
+	}
+	w, err := buildWriter(cmd)
+	if err != nil {
+		return nil // not configured (no login/project) — stay quiet
+	}
+	der := derive.DeriveSession(payload.Cwd, recs)
+	_, _ = w.WriteSession(der) // never surface write errors from a hook
+	return nil
+}
+
+// buildWriter resolves the write endpoint (like `sync`: --server-url / QUORUM_SERVER_URL / login
+// config; prod by default, localhost for devs), best-effort Bearer, and project (active workspace
+// unless --project). Core is never targeted directly — writes go through the public /sync/import route.
+func buildWriter(cmd *cobra.Command) (*derive.Writer, error) {
+	out := cmd.OutOrStdout()
+	project, _ := cmd.Flags().GetString("project")
+	writerDry, _ := cmd.Flags().GetBool("writer-dry-run")
+
+	serverURL := resolveRemoteServerURL(cmd)
+	if serverURL == "" {
+		return nil, fmt.Errorf("no server URL: run `flmnt login`, set QUORUM_SERVER_URL, or pass --server-url (e.g. http://localhost:3000 for a local stack)")
+	}
+	if project == "" {
+		project = resolveActiveWorkspace(cmd)
+	}
+	if project == "" {
+		return nil, fmt.Errorf("no project: pass --project or select an active workspace (`flmnt workspace use`)")
+	}
+	return &derive.Writer{
+		Endpoint:   serverURL,
+		ProjectID:  project,
+		AuthHeader: bestEffortBearer(cmd, serverURL),
+		DryRun:     writerDry,
+		Log:        func(s string) { fmt.Fprintln(out, s) },
+	}, nil
 }
 
 // bestEffortBearer returns a fresh "Bearer <token>" if logged in to serverURL, else "" (local stack
@@ -206,5 +249,7 @@ func init() {
 	deriveCmd.Flags().String("project", "", "Quorum project id to write into (default: active workspace)")
 	deriveCmd.Flags().String("session", "", "Restrict to one main session (id prefix)")
 	deriveCmd.Flags().Bool("writer-dry-run", false, "With --write: print the import payload instead of sending it")
+	deriveCmd.Flags().Bool("hook", false, "Stop-hook mode: read the hook JSON from stdin and derive+import that one session (fails quiet)")
+	deriveCmd.Flags().Bool("force", false, "With --write backfill: re-derive sessions even if the cursor marks them processed")
 	rootCmd.AddCommand(deriveCmd)
 }
