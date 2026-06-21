@@ -11,10 +11,11 @@ const (
 // No LLM, no writes — this is the artifact-grounded candidate set the Phase-2 judge consumes.
 func DeriveSession(repo string, recs []Record) SessionDerivation {
 	d := NominateSession(repo, recs)
-	Correlate(&d, recs)
 	if commits, err := CommitsInWindow(repo, d.Branch, d.WindowFrom, d.WindowTo); err == nil {
 		d.addGitCommits(commits)
 	}
+	Refine(&d)          // LLM-free: drop noise + dedup + keyframe recap (before correlation)
+	Correlate(&d, recs) // causal_refs among surviving candidates only
 	assignConfidence(&d)
 	return d
 }
