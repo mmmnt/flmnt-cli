@@ -152,7 +152,9 @@ func (w *Writer) envelope(d SessionDerivation, c Candidate) eventEnvelope {
 func entryType(k Kind) string {
 	switch k {
 	case KindKeyframe:
-		return "keyframe.written"
+		// NOT "keyframe.written" — a derived per-session recap must not shadow the project's real
+		// curated keyframe (which /keyframes/latest returns). The brief surfaces it as a fallback.
+		return "session.recap"
 	case KindMistake:
 		return "decision.mistake"
 	case KindCommit:

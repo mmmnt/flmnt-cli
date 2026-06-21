@@ -83,13 +83,19 @@ func Render(cfg Config) (string, error) {
 
 	var b strings.Builder
 
+	var domainEntries []envelope
+	_ = cfg.get("/streams/"+domain+"/entries?limit=200&direction=backwards", &domainEntries)
+
+	// Current state: prefer the project's real curated keyframe; fall back to the latest derived
+	// session recap only when there's no real keyframe yet (a fresh repo).
 	var kf keyframeResp
 	if err := cfg.get("/streams/"+domain+"/keyframes/latest", &kf); err == nil && strings.TrimSpace(kf.Content) != "" {
 		b.WriteString("Current state: " + oneLine(kf.Content) + "\n\n")
+	} else if rec := latestContent(domainEntries, "session.recap"); rec != "" {
+		b.WriteString("Current state: " + oneLine(rec) + "\n\n")
 	}
 
-	var domainEntries []envelope
-	if err := cfg.get("/streams/"+domain+"/entries?limit=200&direction=backwards", &domainEntries); err == nil {
+	{
 		// Commits are the primary, curated decision signal (real rationale that landed).
 		if chgs := pick(domainEntries, "commit.recorded", 6); len(chgs) > 0 {
 			b.WriteString("Recent changes (commits):\n")
@@ -135,6 +141,17 @@ func pick(entries []envelope, entryType string, max int) []envelope {
 		}
 	}
 	return out
+}
+
+// latestContent returns the content (or title) of the most recent entry of entryType, given
+// entries in newest-first (backwards) order; "" if none.
+func latestContent(entries []envelope, entryType string) string {
+	for _, e := range entries {
+		if e.EntryType == entryType {
+			return firstNonEmpty(e.Payload.Content, e.Payload.Title)
+		}
+	}
+	return ""
 }
 
 func oneLine(s string) string {
