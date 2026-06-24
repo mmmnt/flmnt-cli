@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"net/url"
 	"path/filepath"
 
 	"github.com/99designs/keyring"
@@ -31,11 +32,25 @@ type TokenSet struct {
 	IDToken      string `json:"id_token,omitempty"`
 }
 
+// normalizeProjectURL keys tokens by server origin (scheme://host) so the auth
+// identity is shared across server-URL variants for the same host — a `/mcp`
+// path or a `?workspace=<id>` query must not split the credential into separate
+// entries (which silently strands a fresh login under one key while reads hit a
+// stale token under another). Falls back to the raw value if it can't be parsed.
+func normalizeProjectURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return raw
+	}
+	return u.Scheme + "://" + u.Host
+}
+
 func tokenItemKey(projectURL, field string) string {
 	return projectURL + "|" + field
 }
 
 func StoreToken(projectURL string, tokens TokenSet) error {
+	projectURL = normalizeProjectURL(projectURL)
 	ring, err := openKeyring()
 	if err != nil {
 		return err
@@ -64,6 +79,7 @@ func StoreToken(projectURL string, tokens TokenSet) error {
 }
 
 func LoadToken(projectURL string) (TokenSet, error) {
+	projectURL = normalizeProjectURL(projectURL)
 	ring, err := openKeyring()
 	if err != nil {
 		return TokenSet{}, err
@@ -111,6 +127,7 @@ func loadLegacyToken(ring keyring.Keyring, projectURL string) (TokenSet, error) 
 }
 
 func DeleteToken(projectURL string) error {
+	projectURL = normalizeProjectURL(projectURL)
 	ring, err := openKeyring()
 	if err != nil {
 		return err

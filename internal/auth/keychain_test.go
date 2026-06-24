@@ -50,6 +50,43 @@ func TestKeychainConfigPrefersOSBackendsWithFileFallbackLast(t *testing.T) {
 	}
 }
 
+func TestTokenKeyNormalizesAcrossServerURLVariants(t *testing.T) {
+	fileRing(t)
+
+	// A login keys the token under a workspace-scoped MCP URL...
+	const loginURL = "https://mcp.staging.flmnt.dev/mcp?workspace=ws-123"
+	if err := StoreToken(loginURL, TokenSet{AccessToken: "broker-at", RefreshToken: "r", IDToken: "i"}); err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	// ...and a read that resolves a different variant (bare host, or /mcp) must find it.
+	for _, readURL := range []string{
+		"https://mcp.staging.flmnt.dev",
+		"https://mcp.staging.flmnt.dev/mcp",
+		"https://mcp.staging.flmnt.dev/mcp?workspace=other",
+	} {
+		got, err := LoadToken(readURL)
+		if err != nil {
+			t.Fatalf("load %q: %v", readURL, err)
+		}
+		if got.AccessToken != "broker-at" {
+			t.Fatalf("read %q got stale/empty token: %+v", readURL, got)
+		}
+	}
+	// Delete via yet another variant clears the shared entry.
+	if err := DeleteToken("https://mcp.staging.flmnt.dev/mcp"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := LoadToken(loginURL); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestNormalizeProjectURLFallsBackOnUnparseableValue(t *testing.T) {
+	if got := normalizeProjectURL("not a url"); got != "not a url" {
+		t.Fatalf("expected raw fallback, got %q", got)
+	}
+}
+
 func TestStoreLoadDeleteRoundTrip(t *testing.T) {
 	fileRing(t)
 
