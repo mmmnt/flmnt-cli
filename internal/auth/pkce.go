@@ -22,10 +22,16 @@ type PKCEConfig struct {
 	RedirectURI string
 }
 
+type pkceResult struct {
+	code string
+	err  error
+}
+
 type pkceFlow struct {
 	cfg          PKCEConfig
 	codeVerifier string
-	authCode     chan string
+	state        string
+	result       chan pkceResult
 }
 
 func RunPKCEFlow(cfg PKCEConfig, openBrowser func(string) error) (TokenSet, error) {
@@ -35,7 +41,12 @@ func RunPKCEFlow(cfg PKCEConfig, openBrowser func(string) error) (TokenSet, erro
 	}
 	challenge := codeChallenge(verifier)
 
-	f := &pkceFlow{cfg: cfg, codeVerifier: verifier, authCode: make(chan string, 1)}
+	state, err := generateState()
+	if err != nil {
+		return TokenSet{}, err
+	}
+
+	f := &pkceFlow{cfg: cfg, codeVerifier: verifier, state: state, result: make(chan pkceResult, 1)}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:9877")
 	if err != nil {
@@ -46,36 +57,50 @@ func RunPKCEFlow(cfg PKCEConfig, openBrowser func(string) error) (TokenSet, erro
 	go srv.Serve(listener)
 	defer srv.Shutdown(context.Background())
 
-	authURL := buildAuthURL(cfg, challenge)
+	authURL := buildAuthURL(cfg, challenge, state)
 	if err := openBrowser(authURL); err != nil {
 		return TokenSet{}, fmt.Errorf("cannot open browser: %w", err)
 	}
 
 	select {
-	case code := <-f.authCode:
-		return exchangeCode(cfg, code, verifier)
+	case res := <-f.result:
+		if res.err != nil {
+			return TokenSet{}, res.err
+		}
+		return exchangeCode(cfg, res.code, verifier)
 	case <-time.After(5 * time.Minute):
 		return TokenSet{}, fmt.Errorf("login timed out waiting for browser callback")
 	}
 }
 
 func (f *pkceFlow) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
+	q := r.URL.Query()
+	code := q.Get("code")
 	if code == "" {
 		http.Error(w, "missing code", http.StatusBadRequest)
 		return
 	}
+	// The broker echoes our original `state` back unchanged. A mismatch means the
+	// callback did not originate from the authorize request we started (CSRF).
+	// Tolerate an absent state for AS implementations that drop it (e.g. some
+	// Cognito-direct configurations), but reject any non-matching value.
+	if got := q.Get("state"); got != "" && got != f.state {
+		http.Error(w, "state mismatch", http.StatusBadRequest)
+		f.result <- pkceResult{err: fmt.Errorf("oauth state mismatch — possible CSRF; aborting login")}
+		return
+	}
 	fmt.Fprint(w, "Login successful — you may close this tab.")
-	f.authCode <- code
+	f.result <- pkceResult{code: code}
 }
 
-func buildAuthURL(cfg PKCEConfig, challenge string) string {
+func buildAuthURL(cfg PKCEConfig, challenge, state string) string {
 	params := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {cfg.ClientID},
 		"redirect_uri":          {cfg.RedirectURI},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
+		"state":                 {state},
 	}
 	return cfg.AuthURL + "?" + params.Encode()
 }
@@ -107,6 +132,14 @@ func exchangeCode(cfg PKCEConfig, code, verifier string) (TokenSet, error) {
 
 func generateCodeVerifier() (string, error) {
 	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func generateState() (string, error) {
+	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}

@@ -58,4 +58,3 @@ func ListenAndServe(addr string, cfg Config) error {
 	}
 	return http.ListenAndServe(addr, h)
 }
-

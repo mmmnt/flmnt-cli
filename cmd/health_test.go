@@ -16,9 +16,9 @@ func TestHealthChecksOK(t *testing.T) {
 	defer srv.Close()
 
 	results := health.Check(health.Config{
-		CoreURL:    srv.URL,
-		EngineURL:  srv.URL,
-		ProxyURL:   srv.URL,
+		CoreURL:   srv.URL,
+		EngineURL: srv.URL,
+		ProxyURL:  srv.URL,
 	})
 
 	for _, r := range results {
