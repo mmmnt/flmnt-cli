@@ -68,23 +68,8 @@ func TestRunInstallsCommandsHooksAndFullMap(t *testing.T) {
 	}
 }
 
-func TestRunPreservesRicherMCPServersAndWritesProxy(t *testing.T) {
-	dir := t.TempDir()
-	seed := `{
-  "mcpServers": {
-    "atlassian": { "type": "stdio", "command": "uvx", "args": ["mcp-atlassian"], "env": { "JIRA_URL": "https://x/" } },
-    "quorum": { "type": "http", "url": "http://localhost:8000/mcp", "headersHelper": "bash scripts/h.sh", "headers": { "X-Workspace-Id": "quorum" } },
-    "flmnt": { "type": "http", "url": "https://mcp.staging.flmnt.dev/mcp?workspace=w" }
-  }
-}`
-	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(seed), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := Run(Config{ServerURL: "u", ProjectID: "p", ProxyPort: 9876, Dir: dir}); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
+func readMCPServers(t *testing.T, dir string) map[string]map[string]any {
+	t.Helper()
 	b, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -95,25 +80,79 @@ func TestRunPreservesRicherMCPServersAndWritesProxy(t *testing.T) {
 	if err := json.Unmarshal(b, &f); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	return f.McpServers
+}
 
-	// atlassian (stdio) preserved verbatim — the old {type,url} round-trip dropped these.
-	at := f.McpServers["atlassian"]
-	if at["command"] != "uvx" || at["args"] == nil || at["env"] == nil {
-		t.Fatalf("atlassian command/args/env not preserved: %v", at)
+const richMCPSeed = `{
+  "mcpServers": {
+    "atlassian": { "type": "stdio", "command": "uvx", "args": ["mcp-atlassian"], "env": { "JIRA_URL": "https://x/" } },
+    "quorum": { "type": "http", "url": "http://localhost:8000/mcp", "headersHelper": "bash scripts/h.sh", "headers": { "X-Workspace-Id": "quorum" } }
+  }
+}`
+
+// Default (direct) mode: write a direct `flmnt` entry to ServerURL, no proxy, preserve others.
+func TestRunDirectModePreservesServersAndWritesDirectEntry(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(richMCPSeed), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	// existing `quorum` entry left untouched — not clobbered by the managed proxy.
-	q := f.McpServers["quorum"]
-	if q["url"] != "http://localhost:8000/mcp" || q["headersHelper"] == nil {
-		t.Fatalf("existing quorum entry clobbered: %v", q)
+	if err := Run(Config{ServerURL: "https://mcp.staging.flmnt.dev/mcp?workspace=w", ProjectID: "p", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
 	}
-	// direct `flmnt` entry preserved.
-	if f.McpServers["flmnt"]["url"] != "https://mcp.staging.flmnt.dev/mcp?workspace=w" {
-		t.Fatalf("direct flmnt entry changed: %v", f.McpServers["flmnt"])
+	s := readMCPServers(t, dir)
+
+	// stdio command/args/env preserved verbatim — the old {type,url} round-trip dropped these.
+	if at := s["atlassian"]; at["command"] != "uvx" || at["args"] == nil || at["env"] == nil {
+		t.Fatalf("atlassian not preserved: %v", at)
 	}
-	// the managed proxy entry is named `flmnt-proxy` at the configured port.
-	p := f.McpServers["flmnt-proxy"]
-	if p == nil || p["url"] != "http://localhost:9876/mcp" {
+	// existing `quorum` entry untouched (url + headersHelper intact).
+	if q := s["quorum"]; q["url"] != "http://localhost:8000/mcp" || q["headersHelper"] == nil {
+		t.Fatalf("quorum clobbered: %v", q)
+	}
+	// managed direct entry written to ServerURL.
+	if f := s["flmnt"]; f == nil || f["url"] != "https://mcp.staging.flmnt.dev/mcp?workspace=w" {
+		t.Fatalf("direct flmnt entry wrong: %v", f)
+	}
+	// no proxy entry in default mode.
+	if _, ok := s["flmnt-proxy"]; ok {
+		t.Fatalf("flmnt-proxy should not be written in direct mode: %v", s["flmnt-proxy"])
+	}
+}
+
+// --proxy mode: write the `flmnt-proxy` localhost entry, preserve others.
+func TestRunProxyModeWritesProxyEntry(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(richMCPSeed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", ProxyPort: 9876, Proxy: true, Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	s := readMCPServers(t, dir)
+
+	if at := s["atlassian"]; at["command"] != "uvx" {
+		t.Fatalf("atlassian not preserved: %v", at)
+	}
+	if p := s["flmnt-proxy"]; p == nil || p["url"] != "http://localhost:9876/mcp" {
 		t.Fatalf("flmnt-proxy entry wrong: %v", p)
+	}
+}
+
+// Switching from --proxy back to direct removes the stale setup-managed flmnt-proxy entry.
+func TestRunDirectModeDropsStaleProxyEntry(t *testing.T) {
+	dir := t.TempDir()
+	if err := Run(Config{ServerURL: "https://r/mcp", ProxyPort: 9876, Proxy: true, Dir: dir}); err != nil {
+		t.Fatalf("Run proxy: %v", err)
+	}
+	if err := Run(Config{ServerURL: "https://r/mcp", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatalf("Run direct: %v", err)
+	}
+	s := readMCPServers(t, dir)
+	if _, ok := s["flmnt-proxy"]; ok {
+		t.Fatalf("stale flmnt-proxy not removed when switching to direct: %v", s)
+	}
+	if f := s["flmnt"]; f == nil || f["url"] != "https://r/mcp" {
+		t.Fatalf("direct flmnt entry wrong: %v", f)
 	}
 }
 

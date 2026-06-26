@@ -26,8 +26,22 @@ func TestSetupWritesMCPJSON(t *testing.T) {
 		t.Fatalf("expected .mcp.json to exist: %v", err)
 	}
 	content := string(data)
-	if !contains(content, "localhost:9876") {
-		t.Error("expected proxy URL in .mcp.json")
+	// Default is the direct entry pointed at ServerURL — not the local proxy.
+	if !contains(content, "https://quorum.example.com") {
+		t.Error("expected direct flmnt URL in .mcp.json")
+	}
+	if contains(content, "localhost:9876") {
+		t.Error("default mode should not write the local-proxy URL")
+	}
+
+	// --proxy writes the local-proxy entry instead.
+	pdir := t.TempDir()
+	if err := setup.Run(setup.Config{ServerURL: "https://quorum.example.com", ProxyPort: 9876, Proxy: true, Dir: pdir}); err != nil {
+		t.Fatalf("setup.Run --proxy: %v", err)
+	}
+	pdata, _ := os.ReadFile(filepath.Join(pdir, ".mcp.json"))
+	if !contains(string(pdata), "localhost:9876") {
+		t.Error("expected proxy URL in .mcp.json under --proxy")
 	}
 }
 
@@ -97,8 +111,8 @@ func TestSetupMergesMCPJSONPreservingExistingServers(t *testing.T) {
 	if !contains(content, "other") {
 		t.Error("expected existing 'other' server to be preserved in .mcp.json")
 	}
-	if !contains(content, "localhost:9876") {
-		t.Error("expected quorum proxy URL to be present in .mcp.json")
+	if !contains(content, "https://quorum.example.com") {
+		t.Error("expected direct flmnt URL to be present in .mcp.json")
 	}
 }
 

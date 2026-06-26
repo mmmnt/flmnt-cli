@@ -11,13 +11,15 @@ import (
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Configure Claude Code integration",
-	Long: `Installs the flmnt automation kit: .mcp.json (local proxy), the full lifecycle hook map +
-flmnt MCP tool permissions in .claude/settings.local.json, the slash-command catalog in
-.claude/commands/, and the nudge/gate scripts in .claude/flmnt-hooks/. Idempotent — safe to re-run.`,
+	Long: `Installs the flmnt automation kit: a direct flmnt entry in .mcp.json (use --proxy for the
+local-proxy entry instead), the full lifecycle hook map + flmnt MCP tool permissions in
+.claude/settings.local.json, the slash-command catalog in .claude/commands/, and the nudge/gate
+scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempotent — safe to re-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		proxyPort, _ := cmd.Flags().GetInt("proxy-port")
 		project, _ := cmd.Flags().GetString("project")
+		proxy, _ := cmd.Flags().GetBool("proxy")
 
 		flmntCmd, err := resolveGateCmd()
 		if err != nil {
@@ -28,6 +30,7 @@ flmnt MCP tool permissions in .claude/settings.local.json, the slash-command cat
 			ServerURL: serverURL,
 			ProjectID: project,
 			ProxyPort: proxyPort,
+			Proxy:     proxy,
 			GateCmd:   flmntCmd + " gate",
 			BriefCmd:  flmntCmd + " brief",
 			DeriveCmd: flmntCmd + " derive --hook",
@@ -39,7 +42,11 @@ flmnt MCP tool permissions in .claude/settings.local.json, the slash-command cat
 
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "Setup complete — flmnt automation kit installed.\n")
-		fmt.Fprintf(out, "  .mcp.json              → flmnt-proxy @ http://localhost:%d/mcp (other servers preserved)\n", proxyPort)
+		if proxy {
+			fmt.Fprintf(out, "  .mcp.json              → flmnt-proxy @ http://localhost:%d/mcp (run `flmnt proxy`; other servers preserved)\n", proxyPort)
+		} else {
+			fmt.Fprintf(out, "  .mcp.json              → flmnt (direct, OAuth on first /mcp; other servers preserved)\n")
+		}
 		fmt.Fprintf(out, "  hooks (settings.local) → SessionStart·UserPromptSubmit·PreToolUse·PostToolUse·PreCompact·SubagentStop·Stop·SessionEnd\n")
 		fmt.Fprintf(out, "  .claude/commands/      → 13 /flmnt-* slash commands\n")
 		fmt.Fprintf(out, "  .claude/flmnt-hooks/   → nudge + causal-ref-gate scripts\n")
@@ -71,7 +78,8 @@ func resolveProject(cmd *cobra.Command, repoDir string) string {
 func init() {
 	setupCmd.Flags().String("server-url", "", "flmnt server URL (required)")
 	setupCmd.Flags().String("project", "", "flmnt project id for this repo (used by derive and brief)")
-	setupCmd.Flags().Int("proxy-port", 9876, "Local proxy port")
+	setupCmd.Flags().Bool("proxy", false, "wire the local-proxy entry (run `flmnt proxy`) instead of the direct OAuth entry — for CI / non-OAuth clients")
+	setupCmd.Flags().Int("proxy-port", 9876, "Local proxy port (used with --proxy)")
 	_ = setupCmd.MarkFlagRequired("server-url")
 	rootCmd.AddCommand(setupCmd)
 }

@@ -16,6 +16,7 @@ type Config struct {
 	BriefCmd  string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
 	DeriveCmd string // Stop: derive + import the finished session (default: "flmnt derive --hook")
 	Dir       string // project root; defaults to cwd
+	Proxy     bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
 }
 
 type ProjectConfig struct {
@@ -23,11 +24,17 @@ type ProjectConfig struct {
 	ProjectID string `json:"project_id,omitempty"` // per-repo flmnt project; derive/brief scope to it
 }
 
-// proxyServerName is the single .mcp.json server entry `setup` manages: the local flmnt
-// proxy (run via `flmnt proxy`) that injects the bearer token and forwards to the remote MCP.
-// Named distinctly (not "quorum"/"flmnt") so setup never collides with a user's own entries —
-// e.g. a local dev-stack `quorum` server or a direct `flmnt` server.
-const proxyServerName = "flmnt-proxy"
+// The two .mcp.json server entries `setup` can manage:
+//   - directServerName: a direct HTTP entry to the remote MCP. Default. Claude Code (and any
+//     OAuth-capable client) authenticates itself via the MCP OAuth flow — no local process.
+//   - proxyServerName: a localhost entry served by `flmnt proxy`, which injects the bearer from
+//     `flmnt login`. Opt-in (--proxy) for clients/environments that can't do OAuth (CI, headless,
+//     non-OAuth MCP clients).
+// Distinct names so setup never collides with a user's own `quorum` server.
+const (
+	directServerName = "flmnt"
+	proxyServerName  = "flmnt-proxy"
+)
 
 type hookEntry struct {
 	Type    string `json:"type"`
@@ -107,12 +114,22 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 	return &pc, nil
 }
 
-// writeMCPJSON writes/updates ONLY the managed `flmnt-proxy` server entry, preserving every
-// other server VERBATIM. Other entries are carried as json.RawMessage so a stdio server's
+// writeMCPJSON writes/updates ONLY the one server entry `setup` manages — the direct `flmnt`
+// entry by default, or the `flmnt-proxy` localhost entry under --proxy — and preserves every
+// OTHER server VERBATIM. Entries are carried as json.RawMessage so a stdio server's
 // command/args/env and an http server's headers/headersHelper survive untouched (the old
 // {type,url} round-trip silently dropped them).
+//
+// Default (direct) mode also drops a stale setup-written `flmnt-proxy` entry so switching off
+// --proxy doesn't leave a dead duplicate connection. `flmnt-proxy` is a setup-only name, so
+// removing it never touches a user's own server.
 func writeMCPJSON(dir string, cfg Config) error {
 	path := filepath.Join(dir, ".mcp.json")
+
+	managed, entry, err := managedServer(cfg)
+	if err != nil {
+		return err
+	}
 
 	servers := map[string]json.RawMessage{}
 	if existing, err := os.ReadFile(path); err == nil {
@@ -121,23 +138,31 @@ func writeMCPJSON(dir string, cfg Config) error {
 		}
 		if err := json.Unmarshal(existing, &current); err == nil {
 			for k, v := range current.McpServers {
-				if k != proxyServerName {
-					servers[k] = v // preserve verbatim
+				if k == managed {
+					continue // we rewrite this one below
 				}
+				if !cfg.Proxy && k == proxyServerName {
+					continue // direct mode cleans up a stale setup-managed proxy entry
+				}
+				servers[k] = v // preserve verbatim
 			}
 		}
 	}
-
-	proxy, err := json.Marshal(map[string]string{
-		"type": "http",
-		"url":  fmt.Sprintf("http://localhost:%d/mcp", cfg.ProxyPort),
-	})
-	if err != nil {
-		return err
-	}
-	servers[proxyServerName] = proxy
+	servers[managed] = entry
 
 	return writeJSON(path, map[string]any{"mcpServers": servers})
+}
+
+// managedServer returns the name and JSON of the single entry setup manages for this mode.
+func managedServer(cfg Config) (string, json.RawMessage, error) {
+	name := directServerName
+	url := cfg.ServerURL
+	if cfg.Proxy {
+		name = proxyServerName
+		url = fmt.Sprintf("http://localhost:%d/mcp", cfg.ProxyPort)
+	}
+	entry, err := json.Marshal(map[string]string{"type": "http", "url": url})
+	return name, entry, err
 }
 
 // writeCommands materializes the embedded slash-command catalog into .claude/commands/.
