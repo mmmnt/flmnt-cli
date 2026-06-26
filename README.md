@@ -82,7 +82,8 @@ flmnt workspace add-member       # add a member to a workspace you own
 flmnt workspace remove-member    # remove a member from a workspace you own
 
 # MCP / Claude Code integration
-flmnt setup --server-url <url>   # write .mcp.json + keyframe-gate hook (idempotent)
+flmnt setup --server-url <url>   # install the automation kit: .mcp.json + full lifecycle hook map
+                                 # + .claude/commands/flmnt-* slash commands + tool permissions (idempotent)
 flmnt proxy                      # run the local MCP proxy (injects Authorization: Bearer)
 flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.json headersHelper
 
