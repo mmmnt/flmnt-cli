@@ -39,7 +39,7 @@ flmnt MCP tool permissions in .claude/settings.local.json, the slash-command cat
 
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "Setup complete — flmnt automation kit installed.\n")
-		fmt.Fprintf(out, "  .mcp.json              → http://localhost:%d/mcp\n", proxyPort)
+		fmt.Fprintf(out, "  .mcp.json              → flmnt-proxy @ http://localhost:%d/mcp (other servers preserved)\n", proxyPort)
 		fmt.Fprintf(out, "  hooks (settings.local) → SessionStart·UserPromptSubmit·PreToolUse·PostToolUse·PreCompact·SubagentStop·Stop·SessionEnd\n")
 		fmt.Fprintf(out, "  .claude/commands/      → 13 /flmnt-* slash commands\n")
 		fmt.Fprintf(out, "  .claude/flmnt-hooks/   → nudge + causal-ref-gate scripts\n")

@@ -68,6 +68,55 @@ func TestRunInstallsCommandsHooksAndFullMap(t *testing.T) {
 	}
 }
 
+func TestRunPreservesRicherMCPServersAndWritesProxy(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{
+  "mcpServers": {
+    "atlassian": { "type": "stdio", "command": "uvx", "args": ["mcp-atlassian"], "env": { "JIRA_URL": "https://x/" } },
+    "quorum": { "type": "http", "url": "http://localhost:8000/mcp", "headersHelper": "bash scripts/h.sh", "headers": { "X-Workspace-Id": "quorum" } },
+    "flmnt": { "type": "http", "url": "https://mcp.staging.flmnt.dev/mcp?workspace=w" }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	b, err := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		McpServers map[string]map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(b, &f); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// atlassian (stdio) preserved verbatim — the old {type,url} round-trip dropped these.
+	at := f.McpServers["atlassian"]
+	if at["command"] != "uvx" || at["args"] == nil || at["env"] == nil {
+		t.Fatalf("atlassian command/args/env not preserved: %v", at)
+	}
+	// existing `quorum` entry left untouched — not clobbered by the managed proxy.
+	q := f.McpServers["quorum"]
+	if q["url"] != "http://localhost:8000/mcp" || q["headersHelper"] == nil {
+		t.Fatalf("existing quorum entry clobbered: %v", q)
+	}
+	// direct `flmnt` entry preserved.
+	if f.McpServers["flmnt"]["url"] != "https://mcp.staging.flmnt.dev/mcp?workspace=w" {
+		t.Fatalf("direct flmnt entry changed: %v", f.McpServers["flmnt"])
+	}
+	// the managed proxy entry is named `flmnt-proxy` at the configured port.
+	p := f.McpServers["flmnt-proxy"]
+	if p == nil || p["url"] != "http://localhost:9876/mcp" {
+		t.Fatalf("flmnt-proxy entry wrong: %v", p)
+	}
+}
+
 func TestRunPreservesExistingSettingsAndMergesPermissions(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")

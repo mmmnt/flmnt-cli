@@ -23,14 +23,11 @@ type ProjectConfig struct {
 	ProjectID string `json:"project_id,omitempty"` // per-repo flmnt project; derive/brief scope to it
 }
 
-type mcpServer struct {
-	Type string `json:"type"`
-	URL  string `json:"url"`
-}
-
-type mcpFile struct {
-	McpServers map[string]mcpServer `json:"mcpServers"`
-}
+// proxyServerName is the single .mcp.json server entry `setup` manages: the local flmnt
+// proxy (run via `flmnt proxy`) that injects the bearer token and forwards to the remote MCP.
+// Named distinctly (not "quorum"/"flmnt") so setup never collides with a user's own entries —
+// e.g. a local dev-stack `quorum` server or a direct `flmnt` server.
+const proxyServerName = "flmnt-proxy"
 
 type hookEntry struct {
 	Type    string `json:"type"`
@@ -110,28 +107,37 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 	return &pc, nil
 }
 
+// writeMCPJSON writes/updates ONLY the managed `flmnt-proxy` server entry, preserving every
+// other server VERBATIM. Other entries are carried as json.RawMessage so a stdio server's
+// command/args/env and an http server's headers/headersHelper survive untouched (the old
+// {type,url} round-trip silently dropped them).
 func writeMCPJSON(dir string, cfg Config) error {
 	path := filepath.Join(dir, ".mcp.json")
 
-	servers := map[string]mcpServer{
-		"quorum": {
-			Type: "http",
-			URL:  fmt.Sprintf("http://localhost:%d/mcp", cfg.ProxyPort),
-		},
-	}
-
+	servers := map[string]json.RawMessage{}
 	if existing, err := os.ReadFile(path); err == nil {
-		var current mcpFile
-		if err := json.Unmarshal(existing, &current); err == nil && current.McpServers != nil {
+		var current struct {
+			McpServers map[string]json.RawMessage `json:"mcpServers"`
+		}
+		if err := json.Unmarshal(existing, &current); err == nil {
 			for k, v := range current.McpServers {
-				if k != "quorum" {
-					servers[k] = v
+				if k != proxyServerName {
+					servers[k] = v // preserve verbatim
 				}
 			}
 		}
 	}
 
-	return writeJSON(path, mcpFile{McpServers: servers})
+	proxy, err := json.Marshal(map[string]string{
+		"type": "http",
+		"url":  fmt.Sprintf("http://localhost:%d/mcp", cfg.ProxyPort),
+	})
+	if err != nil {
+		return err
+	}
+	servers[proxyServerName] = proxy
+
+	return writeJSON(path, map[string]any{"mcpServers": servers})
 }
 
 // writeCommands materializes the embedded slash-command catalog into .claude/commands/.
