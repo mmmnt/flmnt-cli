@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -31,13 +32,36 @@ func (c Client) client() *http.Client {
 	return &http.Client{Timeout: 8 * time.Second}
 }
 
-// baseURL strips a trailing /mcp or /sse so REST routes resolve, matching brief.baseURL/syncBaseURL.
+// baseURL reduces the configured endpoint to the host the REST routes live on. The login config's
+// server_url is the full MCP URL — e.g. https://host/mcp?workspace=<id> — so we must drop the query
+// AND strip a trailing /mcp|/sse path segment (a plain string TrimSuffix misses the query case).
 func (c Client) baseURL() string {
-	s := strings.TrimRight(c.Endpoint, "/")
-	for _, suf := range []string{"/mcp", "/sse"} {
-		s = strings.TrimSuffix(s, suf)
+	raw := strings.TrimSpace(c.Endpoint)
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		s := strings.TrimRight(raw, "/")
+		for _, suf := range []string{"/mcp", "/sse"} {
+			s = strings.TrimSuffix(s, suf)
+		}
+		return strings.TrimRight(s, "/")
 	}
-	return strings.TrimRight(s, "/")
+	u.RawQuery = ""
+	u.Fragment = ""
+	p := strings.TrimRight(u.Path, "/")
+	for _, suf := range []string{"/mcp", "/sse"} {
+		p = strings.TrimSuffix(p, suf)
+	}
+	u.Path = strings.TrimRight(p, "/")
+	return strings.TrimRight(u.String(), "/")
+}
+
+// WorkspaceFromURL extracts the ?workspace=<id> param from an MCP URL — used as the project/workspace
+// fallback when the login config carries the workspace in the server_url rather than a separate field.
+func WorkspaceFromURL(raw string) string {
+	if u, err := url.Parse(strings.TrimSpace(raw)); err == nil {
+		return u.Query().Get("workspace")
+	}
+	return ""
 }
 
 func (c Client) post(path string, body any, out any) error {

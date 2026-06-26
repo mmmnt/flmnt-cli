@@ -115,6 +115,18 @@ func TestBaseURLStripsMcpSuffix(t *testing.T) {
 	}
 }
 
+func TestBaseURLDropsPathSuffixAndQuery(t *testing.T) {
+	// The login config server_url looks like https://host/mcp?workspace=<id> — both the /mcp path
+	// segment and the query must be dropped so /streams/... resolves at the host root.
+	c := Client{Endpoint: "https://host.example/mcp?workspace=abc123"}
+	if got := c.baseURL(); got != "https://host.example" {
+		t.Fatalf("baseURL = %q, want https://host.example", got)
+	}
+	if ws := WorkspaceFromURL("https://host.example/mcp?workspace=abc123"); ws != "abc123" {
+		t.Fatalf("WorkspaceFromURL = %q, want abc123", ws)
+	}
+}
+
 func TestNon2xxReturnsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(403)

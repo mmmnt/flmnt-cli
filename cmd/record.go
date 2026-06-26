@@ -22,6 +22,10 @@ func newRecordClient(cmd *cobra.Command) (record.Client, string, error) {
 	cwd, _ := os.Getwd()
 	project := resolveProject(cmd, cwd)
 	if project == "" {
+		// Fall back to the workspace embedded in the server_url (?workspace=<id>), as written by login.
+		project = record.WorkspaceFromURL(serverURL)
+	}
+	if project == "" {
 		return record.Client{}, "", fmt.Errorf("no project: pass --project, set project_id in .quorum.json, or select an active workspace")
 	}
 	return record.Client{
