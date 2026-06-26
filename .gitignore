@@ -5,3 +5,8 @@ coverage/
 *.log
 flmnt
 flmnt.exe
+
+# Artifacts written by `flmnt setup` when run inside this repo for testing
+.claude/
+.mcp.json
+.quorum.json

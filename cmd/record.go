@@ -111,36 +111,43 @@ type hookPayload struct {
 	ToolResponse json.RawMessage `json:"tool_response"`
 }
 
-// runMetricHook parses a PostToolUse(Bash) payload from stdin and records a best-effort CI metric.
-// Silent + non-failing by design.
-func runMetricHook(cmd *cobra.Command) {
-	raw, _ := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
+// classifyHookMetric parses a PostToolUse(Bash) payload and returns the metric labels for a CI-shaped
+// command, or ok=false when the payload isn't parseable or isn't a CI command. Pure (no network) so it
+// is unit-testable; runMetricHook wraps it with the actual write.
+func classifyHookMetric(raw []byte) (map[string]string, bool) {
 	var p hookPayload
 	if json.Unmarshal(raw, &p) != nil {
-		return
+		return nil, false
 	}
 	command := strings.Join(strings.Fields(p.ToolInput.Command), " ")
 	m := ciCommandRe.FindString(command)
 	if m == "" {
-		return // not a CI-shaped command — nothing to record
+		return nil, false // not a CI-shaped command — nothing to record
 	}
 	category := strings.ToLower(strings.Fields(m)[0])
-	if strings.Contains(m, "deploy") {
+	if strings.Contains(strings.ToLower(m), "deploy") {
 		category = "deploy"
 	}
 	outcome := "ok"
 	if resp := strings.ToLower(string(p.ToolResponse)); strings.Contains(resp, "error") || strings.Contains(resp, "fail") {
 		outcome = "fail"
 	}
+	return map[string]string{"category": category, "outcome": outcome, "command": truncate(command, 160), "tool": "Bash"}, true
+}
+
+// runMetricHook parses a PostToolUse(Bash) payload from stdin and records a best-effort CI metric.
+// Silent + non-failing by design.
+func runMetricHook(cmd *cobra.Command) {
+	raw, _ := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
+	labels, ok := classifyHookMetric(raw)
+	if !ok {
+		return
+	}
 	c, project, err := newRecordClient(cmd)
 	if err != nil {
 		return
 	}
-	if command := truncate(command, 160); command != "" {
-		_ = c.Metric(record.MetricsStream(project), "ci.run", 1, map[string]string{
-			"category": category, "outcome": outcome, "command": command, "tool": "Bash",
-		})
-	}
+	_ = c.Metric(record.MetricsStream(project), "ci.run", 1, labels)
 }
 
 /* ---------- record-plan ---------- */

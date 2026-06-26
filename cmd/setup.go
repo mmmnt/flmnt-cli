@@ -11,8 +11,9 @@ import (
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Configure Claude Code integration",
-	Long: `Writes .mcp.json (pointing to the local proxy) and .claude/settings.local.json
-(UserPromptSubmit context hook). Idempotent — safe to run multiple times.`,
+	Long: `Installs the flmnt automation kit: .mcp.json (local proxy), the full lifecycle hook map +
+flmnt MCP tool permissions in .claude/settings.local.json, the slash-command catalog in
+.claude/commands/, and the nudge/gate scripts in .claude/flmnt-hooks/. Idempotent — safe to re-run.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		proxyPort, _ := cmd.Flags().GetInt("proxy-port")
@@ -36,11 +37,13 @@ var setupCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Setup complete — continuity loop wired.\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  .mcp.json          → http://localhost:%d/mcp\n", proxyPort)
-		fmt.Fprintf(cmd.OutOrStdout(), "  UserPromptSubmit   → %s gate\n", flmntCmd)
-		fmt.Fprintf(cmd.OutOrStdout(), "  SessionStart       → %s brief         (inject project memory)\n", flmntCmd)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Stop               → %s derive --hook (capture the session)\n", flmntCmd)
+		out := cmd.OutOrStdout()
+		fmt.Fprintf(out, "Setup complete — flmnt automation kit installed.\n")
+		fmt.Fprintf(out, "  .mcp.json              → http://localhost:%d/mcp\n", proxyPort)
+		fmt.Fprintf(out, "  hooks (settings.local) → SessionStart·UserPromptSubmit·PreToolUse·PostToolUse·PreCompact·SubagentStop·Stop·SessionEnd\n")
+		fmt.Fprintf(out, "  .claude/commands/      → 13 /flmnt-* slash commands\n")
+		fmt.Fprintf(out, "  .claude/flmnt-hooks/   → nudge + causal-ref-gate scripts\n")
+		fmt.Fprintf(out, "  permissions            → flmnt MCP tools granted\n")
 		return nil
 	},
 }
