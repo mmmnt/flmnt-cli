@@ -90,6 +90,15 @@ flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.j
 flmnt sync push                  # sync local Quorum data up to the remote workspace
 flmnt sync pull                  # sync remote workspace data down to local
 
+# Memory (continuity loop + deterministic writes for hooks / CI)
+flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + mistakes
+flmnt derive --hook              # Stop: derive decisions/keyframes/mistakes from transcript + git
+flmnt record-metric --name <n> --value <v>   # write an operational metric to {project}::metrics
+flmnt record-metric --hook       # PostToolUse: emit a CI metric for the command that just ran (stdin)
+flmnt record-plan --content <p>  # write a multi-step plan to {project}::plan
+flmnt record-supersession --content <c> --supersedes <id>  # replace a decision (SUPERSEDED_BY edge)
+flmnt record-attestation --kind <k> --note <n>             # ContextAttestation metric
+
 # Utilities
 flmnt health                     # check health of Core, Engine, and proxy services
 flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook
