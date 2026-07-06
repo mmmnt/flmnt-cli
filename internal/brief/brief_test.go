@@ -2,69 +2,74 @@ package brief
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 )
 
-func TestBaseURLStripsMCPSuffix(t *testing.T) {
-	cases := map[string]string{
-		"https://mcp.staging.flmnt.dev":      "https://mcp.staging.flmnt.dev",
-		"https://mcp.staging.flmnt.dev/":     "https://mcp.staging.flmnt.dev",
-		"https://mcp.staging.flmnt.dev/mcp":  "https://mcp.staging.flmnt.dev",
-		"https://mcp.staging.flmnt.dev/mcp/": "https://mcp.staging.flmnt.dev",
-		"https://mcp.staging.flmnt.dev/sse":  "https://mcp.staging.flmnt.dev",
-	}
-	for in, want := range cases {
-		if got := (Config{Endpoint: in}).baseURL(); got != want {
-			t.Errorf("baseURL(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-// TestRenderAgainstProxyShape exercises Render against the staging proxy's REST read surface
-// (the /streams passthrough), asserting the workspace header is sent, the /mcp suffix is stripped,
-// and the briefing surfaces the keyframe + typed entries.
-func TestRenderAgainstProxyShape(t *testing.T) {
+// TestRenderRunsAuthenticatedGraphQL exercises Render against the router GraphQL surface, asserting
+// the bearer token is sent and the briefing surfaces the keyframe + typed entries per stream.
+func TestRenderRunsAuthenticatedGraphQL(t *testing.T) {
 	const ws = "ws-1"
-	var gotWorkspace string
+	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotWorkspace = r.Header.Get("X-Workspace-Id")
+		gotAuth = r.Header.Get("Authorization")
+		b, _ := io.ReadAll(r.Body)
+		var req struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		_ = json.Unmarshal(b, &req)
+		s, _ := req.Variables["s"].(string)
 		switch {
-		case r.URL.Path == "/streams/"+ws+"::domain/keyframes/latest":
-			_ = json.NewEncoder(w).Encode(keyframeResp{Content: "Current understanding of the system."})
-		case r.URL.Path == "/streams/"+ws+"::domain/entries":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"entryType": "commit.recorded", "payload": map[string]any{"title": "fix: dashboard tail"}},
-				{"entryType": "decision.made", "payload": map[string]any{"content": "Use /sync/import for writes."}},
-			})
-		case r.URL.Path == "/streams/"+ws+"::mistake/entries":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"entryType": "decision.mistake", "payload": map[string]any{"content": "Hardcoded core-url on a public CLI."}},
-			})
+		case strings.Contains(req.Query, "memoryKeyframe"):
+			_, _ = w.Write([]byte(`{"data":{"memoryKeyframe":{"content":"Current understanding of the system."}}}`))
+		case strings.Contains(req.Query, "memoryEntries") && s == ws+"::domain":
+			_, _ = w.Write([]byte(`{"data":{"memoryEntries":[{"entryType":"commit.recorded","content":"fix: dashboard tail"},{"entryType":"decision.made","content":"Use memoryImport for writes."}]}}`))
+		case strings.Contains(req.Query, "memoryEntries") && s == ws+"::mistake":
+			_, _ = w.Write([]byte(`{"data":{"memoryEntries":[{"entryType":"decision.mistake","content":"Hardcoded core-url on a public CLI."}]}}`))
 		default:
-			http.NotFound(w, r)
+			_, _ = w.Write([]byte(`{"data":{"memoryEntries":[]}}`))
 		}
 	}))
 	defer srv.Close()
 
-	// Endpoint carries a /mcp suffix to prove normalization; ProjectID drives X-Workspace-Id.
-	out, err := Render(Config{Endpoint: srv.URL + "/mcp", ProjectID: ws, AuthHeader: "Bearer x"})
+	out, err := Render(Config{GQL: apiclient.New(srv.URL, "tok"), ProjectID: ws})
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if gotWorkspace != ws {
-		t.Errorf("X-Workspace-Id = %q, want %q", gotWorkspace, ws)
+	if gotAuth != "Bearer tok" {
+		t.Errorf("Authorization = %q, want Bearer tok", gotAuth)
 	}
 	for _, want := range []string{
 		"Current understanding of the system.",
 		"fix: dashboard tail",
-		"Use /sync/import for writes.",
+		"Use memoryImport for writes.",
 		"Hardcoded core-url on a public CLI.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("briefing missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestRenderEmptyWhenNoMemory returns "" (nothing to inject) when every stream is empty.
+func TestRenderEmptyWhenNoMemory(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(b), "memoryKeyframe") {
+			_, _ = w.Write([]byte(`{"data":{"memoryKeyframe":null}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"memoryEntries":[]}}`))
+	}))
+	defer srv.Close()
+	out, err := Render(Config{GQL: apiclient.New(srv.URL, "tok"), ProjectID: "ws-1"})
+	if err != nil || out != "" {
+		t.Fatalf("want empty briefing, got err=%v out=%q", err, out)
 	}
 }

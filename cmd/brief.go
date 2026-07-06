@@ -27,11 +27,11 @@ func runBrief(cmd *cobra.Command, args []string) error {
 	if project == "" {
 		return nil
 	}
-	text, err := brief.Render(brief.Config{
-		Endpoint:   serverURL,
-		ProjectID:  project,
-		AuthHeader: bestEffortBearer(cmd, serverURL),
-	})
+	gql, err := graphQLClientFor(cmd, serverURL)
+	if err != nil {
+		return nil // not configured — stay quiet
+	}
+	text, err := brief.Render(brief.Config{GQL: gql, ProjectID: project})
 	if err != nil || text == "" {
 		return nil
 	}

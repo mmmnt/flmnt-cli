@@ -1,85 +1,56 @@
 // Package brief renders a SessionStart briefing from a project's current reasoning state in flmnt —
-// the read half of the continuity loop. Read-only, stream-scoped, LLM-free.
+// the read half of the continuity loop. Read-only, stream-scoped, LLM-free. Every read runs through
+// the authenticated router GraphQL (memoryEntries/memoryKeyframe), so the router enforces the session
+// and the caller's rights to the workspace.
 package brief
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
+
+	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 )
 
-// Config controls a briefing render against a flmnt endpoint (resolved by the caller — prod by
-// default, localhost for devs). AuthHeader is "Bearer <token>" for remote, "" for a local stack.
+// Config controls a briefing render. GQL is the authenticated router GraphQL client; ProjectID scopes
+// the reads to the caller's workspace.
 type Config struct {
-	Endpoint     string
+	GQL          *apiclient.Client
 	ProjectID    string
-	AuthHeader   string
 	MaxDecisions int
 	MaxMistakes  int
-	HTTP         *http.Client
 }
 
 type envelope struct {
 	EntryType string `json:"entryType"`
 	Timestamp string `json:"timestamp"`
-	Payload   struct {
-		Content string `json:"content"`
-		Title   string `json:"title"`
-	} `json:"payload"`
-}
-
-type keyframeResp struct {
 	Content   string `json:"content"`
-	CreatedAt string `json:"created_at"`
 }
 
-var errNotFound = errors.New("not found")
+const queryEntries = `query($s: ID!, $limit: Int){ memoryEntries(streamId: $s, limit: $limit){ entryType timestamp content } }`
+const queryKeyframe = `query($s: ID!){ memoryKeyframe(streamId: $s){ content } }`
 
-func (cfg Config) client() *http.Client {
-	if cfg.HTTP != nil {
-		return cfg.HTTP
+// entries reads the newest `limit` entries of a stream via memoryEntries (newest-first). Best-effort:
+// returns nil on any error so a missing stream degrades to an empty section.
+func (cfg Config) entries(streamID string, limit int) []envelope {
+	var out struct {
+		MemoryEntries []envelope `json:"memoryEntries"`
 	}
-	return &http.Client{Timeout: 8 * time.Second}
+	if err := cfg.GQL.Query(queryEntries, map[string]any{"s": streamID, "limit": limit}, &out); err != nil {
+		return nil
+	}
+	return out.MemoryEntries
 }
 
-// baseURL normalizes the endpoint to the host the REST read routes live on, stripping a trailing
-// /mcp or /sse — mirroring the writer's syncBaseURL so brief and sync/import agree on the base.
-func (cfg Config) baseURL() string {
-	s := strings.TrimRight(cfg.Endpoint, "/")
-	for _, suf := range []string{"/mcp", "/sse"} {
-		s = strings.TrimSuffix(s, suf)
+// keyframe reads a stream's latest keyframe content via memoryKeyframe; "" when none exists.
+func (cfg Config) keyframe(streamID string) string {
+	var out struct {
+		MemoryKeyframe *struct {
+			Content string `json:"content"`
+		} `json:"memoryKeyframe"`
 	}
-	return strings.TrimRight(s, "/")
-}
-
-func (cfg Config) get(path string, out any) error {
-	req, err := http.NewRequest(http.MethodGet, cfg.baseURL()+path, nil)
-	if err != nil {
-		return err
+	if err := cfg.GQL.Query(queryKeyframe, map[string]any{"s": streamID}, &out); err != nil || out.MemoryKeyframe == nil {
+		return ""
 	}
-	if cfg.AuthHeader != "" {
-		req.Header.Set("Authorization", cfg.AuthHeader)
-	}
-	if cfg.ProjectID != "" {
-		req.Header.Set("X-Workspace-Id", cfg.ProjectID) // the remote proxy requires workspace selection
-	}
-	resp, err := cfg.client().Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		return errNotFound
-	}
-	if resp.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("%s -> %d: %s", path, resp.StatusCode, string(b))
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return out.MemoryKeyframe.Content
 }
 
 // Render assembles the briefing: latest keyframe (current understanding) + recent decisions +
@@ -96,43 +67,36 @@ func Render(cfg Config) (string, error) {
 
 	var b strings.Builder
 
-	var domainEntries []envelope
-	_ = cfg.get("/streams/"+domain+"/entries?limit=200&direction=backwards", &domainEntries)
+	domainEntries := cfg.entries(domain, 200)
 
 	// Current state: prefer the project's real curated keyframe; fall back to the latest derived
 	// session recap only when there's no real keyframe yet (a fresh repo).
-	var kf keyframeResp
-	if err := cfg.get("/streams/"+domain+"/keyframes/latest", &kf); err == nil && strings.TrimSpace(kf.Content) != "" {
-		b.WriteString("Current state: " + oneLine(kf.Content) + "\n\n")
+	if kf := cfg.keyframe(domain); strings.TrimSpace(kf) != "" {
+		b.WriteString("Current state: " + oneLine(kf) + "\n\n")
 	} else if rec := latestContent(domainEntries, "session.recap"); rec != "" {
 		b.WriteString("Current state: " + oneLine(rec) + "\n\n")
 	}
 
-	{
-		// Commits are the primary, curated decision signal (real rationale that landed).
-		if chgs := pick(domainEntries, "commit.recorded", 6); len(chgs) > 0 {
-			b.WriteString("Recent changes (commits):\n")
-			for _, ch := range chgs {
-				b.WriteString("- " + oneLine(firstNonEmpty(ch.Payload.Title, ch.Payload.Content)) + "\n")
-			}
-			b.WriteString("\n")
+	// Commits are the primary, curated decision signal (real rationale that landed).
+	if chgs := pick(domainEntries, "commit.recorded", 6); len(chgs) > 0 {
+		b.WriteString("Recent changes (commits):\n")
+		for _, ch := range chgs {
+			b.WriteString("- " + oneLine(ch.Content) + "\n")
 		}
-		if decs := pick(domainEntries, "decision.made", cfg.MaxDecisions); len(decs) > 0 {
-			b.WriteString("Recent decisions:\n")
-			for _, d := range decs {
-				b.WriteString("- " + oneLine(firstNonEmpty(d.Payload.Content, d.Payload.Title)) + "\n")
-			}
-			b.WriteString("\n")
+		b.WriteString("\n")
+	}
+	if decs := pick(domainEntries, "decision.made", cfg.MaxDecisions); len(decs) > 0 {
+		b.WriteString("Recent decisions:\n")
+		for _, d := range decs {
+			b.WriteString("- " + oneLine(d.Content) + "\n")
 		}
+		b.WriteString("\n")
 	}
 
-	var mistakeEntries []envelope
-	if err := cfg.get("/streams/"+mistakes+"/entries?limit=60&direction=backwards", &mistakeEntries); err == nil {
-		if mis := pick(mistakeEntries, "decision.mistake", cfg.MaxMistakes); len(mis) > 0 {
-			b.WriteString("Recent mistakes (avoid repeating):\n")
-			for _, m := range mis {
-				b.WriteString("- " + oneLine(firstNonEmpty(m.Payload.Content, m.Payload.Title)) + "\n")
-			}
+	if mis := pick(cfg.entries(mistakes, 60), "decision.mistake", cfg.MaxMistakes); len(mis) > 0 {
+		b.WriteString("Recent mistakes (avoid repeating):\n")
+		for _, m := range mis {
+			b.WriteString("- " + oneLine(m.Content) + "\n")
 		}
 	}
 
@@ -156,12 +120,12 @@ func pick(entries []envelope, entryType string, max int) []envelope {
 	return out
 }
 
-// latestContent returns the content (or title) of the most recent entry of entryType, given
-// entries in newest-first (backwards) order; "" if none.
+// latestContent returns the content of the most recent entry of entryType, given entries in
+// newest-first order; "" if none.
 func latestContent(entries []envelope, entryType string) string {
 	for _, e := range entries {
 		if e.EntryType == entryType {
-			return firstNonEmpty(e.Payload.Content, e.Payload.Title)
+			return e.Content
 		}
 	}
 	return ""
@@ -173,11 +137,4 @@ func oneLine(s string) string {
 		s = s[:160] + "…"
 	}
 	return s
-}
-
-func firstNonEmpty(a, b string) string {
-	if strings.TrimSpace(a) != "" {
-		return a
-	}
-	return b
 }
