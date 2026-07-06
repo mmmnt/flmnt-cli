@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/gate"
@@ -14,11 +15,23 @@ var gateCmd = &cobra.Command{
 	Long:  "Outputs reminder text if your saved context is stale or missing. Silent if the service is unreachable.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		threshold, _ := cmd.Flags().GetDuration("threshold")
-		out, err := gate.Run(gate.Config{
-			CoreURL:   envOr("CORE_URL", "http://localhost:3000"),
-			ProjectID: envOr("QUORUM_PROJECT_ID", "quorum"),
-			Threshold: threshold,
-		})
+		serverURL := resolveRemoteServerURL(cmd)
+		if serverURL == "" {
+			return nil // not configured — stay quiet
+		}
+		cwd, _ := os.Getwd()
+		project := resolveProject(cmd, cwd)
+		if project == "" {
+			project = envOr("QUORUM_PROJECT_ID", "")
+		}
+		if project == "" {
+			return nil
+		}
+		gql, err := graphQLClientFor(cmd, serverURL)
+		if err != nil {
+			return nil
+		}
+		out, err := gate.Run(gate.Config{GQL: gql, ProjectID: project, Threshold: threshold})
 		if err != nil {
 			return err
 		}
