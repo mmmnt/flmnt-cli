@@ -17,8 +17,8 @@ type CursorStore struct {
 	cursors map[string]map[string]int
 }
 
-func cursorKey(mcpURL, workspace string) string {
-	return syncBaseURL(mcpURL) + "|" + workspace
+func cursorKey(ref, workspace string) string {
+	return ref + "|" + workspace
 }
 
 // DefaultCursorPath is ~/.filament/sync-cursors.json.

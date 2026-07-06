@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 	"github.com/mmmnt/flmnt-cli/internal/sync"
 	"github.com/spf13/cobra"
@@ -72,8 +73,8 @@ func runSync(cmd *cobra.Command, push bool) error {
 
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	fmt.Fprintf(cmd.OutOrStdout(), "Syncing %s (%s [%s] -> %s [%s])\n",
-		direction, from.MCPURL, from.Workspace, to.MCPURL, to.Workspace)
-	return sync.Run(sync.New(), from, to, cursors, dryRun, cmd.OutOrStdout())
+		direction, from.Ref, from.Workspace, to.Ref, to.Workspace)
+	return sync.Run(from, to, cursors, dryRun, cmd.OutOrStdout())
 }
 
 // resolveRemoteEndpoint resolves the OAuth-authenticated (staging) side from the
@@ -126,7 +127,11 @@ func resolveRemoteEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	if workspace == "" {
 		return sync.Endpoint{}, fmt.Errorf("no remote workspace (run `flmnt workspace use` or pass --remote-workspace)")
 	}
-	return sync.Endpoint{MCPURL: serverURL, AuthValue: "Bearer " + fresh.AccessToken, Workspace: workspace}, nil
+	endpoint := resolveGraphQLEndpointFor(cmd, serverURL)
+	if endpoint == "" {
+		return sync.Endpoint{}, fmt.Errorf("no remote GraphQL endpoint for %s", serverURL)
+	}
+	return sync.Endpoint{GQL: apiclient.New(endpoint, fresh.AccessToken), Workspace: workspace, Ref: serverURL}, nil
 }
 
 // resolveLocalEndpoint resolves the local MCP side. Its auth header comes from a
@@ -149,7 +154,11 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	if err != nil {
 		return sync.Endpoint{}, fmt.Errorf("local auth (%q): %w", authCmd, err)
 	}
-	return sync.Endpoint{MCPURL: url, AuthValue: authValue, Workspace: workspace}, nil
+	endpoint := resolveGraphQLEndpointFor(cmd, url)
+	if endpoint == "" {
+		return sync.Endpoint{}, fmt.Errorf("no local GraphQL endpoint for %s", url)
+	}
+	return sync.Endpoint{GQL: apiclient.New(endpoint, strings.TrimPrefix(authValue, "Bearer ")), Workspace: workspace, Ref: url}, nil
 }
 
 // runAuthHelper runs a headers-helper command and extracts the Authorization

@@ -1,52 +1,39 @@
 // Package sync moves Quorum event data between environments (local <-> staging)
-// through their public MCP /sync routes. Export reads the source workspace's
-// streams as project-agnostic { streamSuffix, events } batches; import re-homes
-// them under the target workspace, deduping by correlationId server-side. The
-// flow is idempotent and bidirectional-safe, so push/pull can be re-run freely.
+// through the authenticated router GraphQL (memoryExport/memoryImport). Export reads
+// the source workspace's streams as project-agnostic { streamSuffix, events } batches;
+// import re-homes them under the target workspace, deduping by correlationId server-side.
+// Both sides authenticate through the router, which enforces the caller's rights to each
+// workspace. The flow is idempotent and bidirectional-safe, so push/pull can be re-run freely.
 package sync
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"strings"
-	"time"
+	"sort"
+
+	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 )
 
-// importBatchSize bounds how many events ride in one /sync/import request. The
-// server replays Neo4j inline per event, so smaller batches stay well under the
-// upstream request timeout while keeping round-trips reasonable.
+// importBatchSize bounds how many events ride in one memoryImport call. The server replays Neo4j
+// inline per event, so smaller batches stay well under the request timeout while keeping round-trips
+// reasonable.
 const importBatchSize = 100
 
-// Endpoint is one side of a sync: an MCP base URL, a ready Authorization header
-// value (e.g. "Bearer <token>"), and the workspace id to scope to.
+// Endpoint is one side of a sync: an authenticated router GraphQL client, the workspace (projectId) to
+// scope to, and a stable Ref (the server URL) used only to key per-source cursors.
 type Endpoint struct {
-	MCPURL    string
-	AuthValue string
+	GQL       *apiclient.Client
 	Workspace string
+	Ref       string
 }
 
-// syncBaseURL normalizes an MCP URL to the base the /sync routes live on. The
-// MCP protocol endpoint is "<base>/mcp"; the sync routes are at "<base>/sync/*".
-func syncBaseURL(raw string) string {
-	u := strings.TrimRight(raw, "/")
-	u = strings.TrimSuffix(u, "/mcp")
-	return strings.TrimRight(u, "/")
-}
-
-// StreamBatch is a project-agnostic slice of one stream's raw events. Events are
-// kept as RawMessage so the CLI never reshapes envelopes — it only carries them.
+// StreamBatch is a project-agnostic slice of one stream's raw events. Events are kept as RawMessage so
+// the CLI never reshapes envelopes — it only carries them.
 type StreamBatch struct {
-	StreamSuffix string            `json:"streamSuffix"`
-	Revision     int               `json:"revision,omitempty"`
-	Events       []json.RawMessage `json:"events"`
-}
-
-type exportResponse struct {
-	ProjectID string        `json:"project_id"`
-	Streams   []StreamBatch `json:"streams"`
+	StreamSuffix string
+	Revision     int
+	Events       []json.RawMessage
 }
 
 // ImportResult is the per-stream outcome reported by the target.
@@ -56,51 +43,67 @@ type ImportResult struct {
 	Skipped      int    `json:"skipped"`
 }
 
-type importResponse struct {
-	ProjectID string         `json:"project_id"`
-	Imported  []ImportResult `json:"imported"`
+const exportQuery = `query($projectId: ID!, $cursors: [MemoryCursorInput!]){ memoryExport(projectId: $projectId, cursors: $cursors){ streams { streamSuffix revision events } } }`
+const importMutation = `mutation($projectId: ID!, $streams: [MemoryStreamImportInput!]!){ memoryImport(projectId: $projectId, streams: $streams){ imported { streamSuffix appended skipped } } }`
+
+// cursorInputs turns the suffix->afterRevision cursor map into the [{streamSuffix, after}] GraphQL
+// input, key-sorted for deterministic requests.
+func cursorInputs(cursors map[string]int) []map[string]any {
+	keys := make([]string, 0, len(cursors))
+	for k := range cursors {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	in := make([]map[string]any, 0, len(keys))
+	for _, k := range keys {
+		in = append(in, map[string]any{"streamSuffix": k, "after": cursors[k]})
+	}
+	return in
 }
 
-// Client performs the HTTP calls against the MCP /sync routes.
-type Client struct {
-	HTTP *http.Client
+// exportStreams runs memoryExport and decodes each stream's events (a JSON-serialized envelope array)
+// into RawMessage slices for batching.
+func exportStreams(ep Endpoint, cursors map[string]int) ([]StreamBatch, error) {
+	var data struct {
+		MemoryExport struct {
+			Streams []struct {
+				StreamSuffix string `json:"streamSuffix"`
+				Revision     int    `json:"revision"`
+				Events       string `json:"events"`
+			} `json:"streams"`
+		} `json:"memoryExport"`
+	}
+	if err := ep.GQL.Query(exportQuery, map[string]any{"projectId": ep.Workspace, "cursors": cursorInputs(cursors)}, &data); err != nil {
+		return nil, err
+	}
+	out := make([]StreamBatch, 0, len(data.MemoryExport.Streams))
+	for _, s := range data.MemoryExport.Streams {
+		var events []json.RawMessage
+		if err := json.Unmarshal([]byte(s.Events), &events); err != nil {
+			return nil, fmt.Errorf("decoding events for %s: %w", s.StreamSuffix, err)
+		}
+		out = append(out, StreamBatch{StreamSuffix: s.StreamSuffix, Revision: s.Revision, Events: events})
+	}
+	return out, nil
 }
 
-// New returns a Client with a sane default timeout.
-func New() *Client {
-	return &Client{HTTP: &http.Client{Timeout: 60 * time.Second}}
-}
-
-func (c *Client) post(ep Endpoint, path string, body any, out any) error {
-	raw, err := json.Marshal(body)
+// importBatch runs memoryImport for one stream's batch, re-serializing the events to the JSON string
+// the mutation expects.
+func importBatch(ep Endpoint, suffix string, events []json.RawMessage) ([]ImportResult, error) {
+	eventsStr, err := json.Marshal(events)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	url := syncBaseURL(ep.MCPURL) + path
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
-	if err != nil {
-		return err
+	var data struct {
+		MemoryImport struct {
+			Imported []ImportResult `json:"imported"`
+		} `json:"memoryImport"`
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if ep.AuthValue != "" {
-		req.Header.Set("Authorization", ep.AuthValue)
+	streams := []map[string]any{{"streamSuffix": suffix, "events": string(eventsStr)}}
+	if err := ep.GQL.Query(importMutation, map[string]any{"projectId": ep.Workspace, "streams": streams}, &data); err != nil {
+		return nil, err
 	}
-	if ep.Workspace != "" {
-		req.Header.Set("X-Workspace-Id", ep.Workspace)
-	}
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	payload, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s -> HTTP %d: %s", path, resp.StatusCode, strings.TrimSpace(string(payload)))
-	}
-	if out == nil {
-		return nil
-	}
-	return json.Unmarshal(payload, out)
+	return data.MemoryImport.Imported, nil
 }
 
 // Plan is the preview of what a sync would move, per stream.
@@ -117,17 +120,17 @@ func (p Plan) Total() int {
 	return n
 }
 
-// Run executes one sync: export from `from` (honoring saved cursors), and unless
-// dryRun, import into `to`. On success it advances and persists the per-source
-// cursors so the next run moves only new events. Progress is written to `out`.
-func Run(c *Client, from, to Endpoint, cursors *CursorStore, dryRun bool, out io.Writer) error {
-	key := cursorKey(from.MCPURL, from.Workspace)
-	var exp exportResponse
-	if err := c.post(from, "/sync/export", map[string]any{"cursors": cursors.For(key)}, &exp); err != nil {
+// Run executes one sync: export from `from` (honoring saved cursors), and unless dryRun, import into
+// `to`. On success it advances and persists the per-source cursors so the next run moves only new
+// events. Progress is written to `out`.
+func Run(from, to Endpoint, cursors *CursorStore, dryRun bool, out io.Writer) error {
+	key := cursorKey(from.Ref, from.Workspace)
+	streams, err := exportStreams(from, cursors.For(key))
+	if err != nil {
 		return fmt.Errorf("export: %w", err)
 	}
 
-	plan := Plan{Streams: exp.Streams}
+	plan := Plan{Streams: streams}
 	if plan.Total() == 0 {
 		fmt.Fprintln(out, "Nothing to sync — already up to date.")
 		return nil
@@ -142,27 +145,25 @@ func Run(c *Client, from, to Endpoint, cursors *CursorStore, dryRun bool, out io
 		return nil
 	}
 
-	// Import one stream at a time, in bounded batches. The server's import replays
-	// Neo4j inline per event, so a single huge request would blow the upstream
-	// timeout; chunking keeps each request fast. Dedup by correlationId on the
-	// server makes the chunks safe to re-send.
-	for _, s := range exp.Streams {
+	// Import one stream at a time, in bounded batches. Import replays Neo4j inline per event, so a
+	// single huge request would blow the timeout; chunking keeps each request fast. Dedup by
+	// correlationId on the server makes the chunks safe to re-send.
+	for _, s := range streams {
 		for start := 0; start < len(s.Events); start += importBatchSize {
 			end := start + importBatchSize
 			if end > len(s.Events) {
 				end = len(s.Events)
 			}
-			batch := StreamBatch{StreamSuffix: s.StreamSuffix, Events: s.Events[start:end]}
-			var res importResponse
-			if err := c.post(to, "/sync/import", map[string]any{"streams": []StreamBatch{batch}}, &res); err != nil {
+			imported, err := importBatch(to, s.StreamSuffix, s.Events[start:end])
+			if err != nil {
 				return fmt.Errorf("import %s: %w", s.StreamSuffix, err)
 			}
-			for _, r := range res.Imported {
+			for _, r := range imported {
 				fmt.Fprintf(out, "  %-32s appended %d, skipped %d\n", r.StreamSuffix, r.Appended, r.Skipped)
 			}
 		}
-		// Advance this source stream's cursor only after all its batches landed, so
-		// re-runs skip what we've moved. Import dedups by correlationId as backstop.
+		// Advance this source stream's cursor only after all its batches landed, so re-runs skip what
+		// we've moved. Import dedups by correlationId as backstop.
 		if s.Revision > 0 {
 			cursors.Set(key, s.StreamSuffix, s.Revision)
 		}

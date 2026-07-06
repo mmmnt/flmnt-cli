@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
@@ -80,10 +79,10 @@ func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveLocalEndpoint: %v", err)
 	}
-	if ep.MCPURL != defaultLocalURL || ep.Workspace != defaultLocalWorkspace {
-		t.Fatalf("defaults wrong: %s / %s", ep.MCPURL, ep.Workspace)
+	if ep.Ref != defaultLocalURL || ep.Workspace != defaultLocalWorkspace {
+		t.Fatalf("defaults wrong: %s / %s", ep.Ref, ep.Workspace)
 	}
-	if !strings.Contains(ep.AuthValue, "Bearer L") {
-		t.Fatalf("auth value = %q", ep.AuthValue)
+	if ep.GQL == nil {
+		t.Fatal("expected an authenticated GraphQL client from the local auth helper")
 	}
 }
