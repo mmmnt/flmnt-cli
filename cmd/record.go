@@ -28,11 +28,11 @@ func newRecordClient(cmd *cobra.Command) (record.Client, string, error) {
 	if project == "" {
 		return record.Client{}, "", fmt.Errorf("no project: pass --project, set project_id in .quorum.json, or select an active workspace")
 	}
-	return record.Client{
-		Endpoint:   serverURL,
-		ProjectID:  project,
-		AuthHeader: bestEffortBearer(cmd, serverURL),
-	}, project, nil
+	gql, err := graphQLClientFor(cmd, serverURL)
+	if err != nil {
+		return record.Client{}, "", err
+	}
+	return record.Client{GQL: gql}, project, nil
 }
 
 func recordFlags(c *cobra.Command) {
@@ -75,9 +75,9 @@ func contentArg(cmd *cobra.Command, flag string, args []string) string {
 var recordMetricCmd = &cobra.Command{
 	Use:   "record-metric",
 	Short: "Record an operational metric to the project's metrics stream",
-	Long: "Writes a metric (POST /streams/{project}::metrics/metrics) — the deterministic counterpart\n" +
-		"to the record_metric MCP tool. With --hook it reads a PostToolUse JSON payload from stdin and\n" +
-		"emits a CI/throughput metric for the command that just ran (used by the PostToolUse(Bash) hook).",
+	Long: "Writes a metric via the authenticated router GraphQL (recordMemoryMetric) — the deterministic\n" +
+		"counterpart to the record_metric MCP tool. With --hook it reads a PostToolUse JSON payload from\n" +
+		"stdin and emits a CI/throughput metric for the command that just ran (used by the PostToolUse(Bash) hook).",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		hook, _ := cmd.Flags().GetBool("hook")
 		if hook {
@@ -154,7 +154,7 @@ func runMetricHook(cmd *cobra.Command) {
 var recordPlanCmd = &cobra.Command{
 	Use:   "record-plan",
 	Short: "Record a multi-step plan snapshot to the project's plan stream",
-	Long:  "Writes a plan (POST /streams/{project}::plan/plans) — the deterministic counterpart to record_plan.",
+	Long:  "Writes a plan via the router GraphQL (recordMemoryPlan) — the deterministic counterpart to record_plan.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, project, err := newRecordClient(cmd)
 		if err != nil {
@@ -176,7 +176,7 @@ var recordPlanCmd = &cobra.Command{
 var recordSupersessionCmd = &cobra.Command{
 	Use:   "record-supersession",
 	Short: "Record a decision that replaces a prior one (creates a SUPERSEDED_BY edge)",
-	Long:  "Writes a superseding decision (POST /streams/{id}/supersessions) — the deterministic counterpart to record_supersession.",
+	Long:  "Writes a superseding decision via the router GraphQL (recordMemorySupersession) — the deterministic counterpart to record_supersession.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, project, err := newRecordClient(cmd)
 		if err != nil {
@@ -214,7 +214,10 @@ var recordAttestationCmd = &cobra.Command{
 	},
 }
 
-func mustString(cmd *cobra.Command, name string) string { v, _ := cmd.Flags().GetString(name); return v }
+func mustString(cmd *cobra.Command, name string) string {
+	v, _ := cmd.Flags().GetString(name)
+	return v
+}
 
 func truncate(s string, n int) string {
 	if len(s) > n {
