@@ -120,7 +120,7 @@ func runWrite(cmd *cobra.Command, proj derive.Project, sessions []string) error 
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Writing to %s  project=%s  authed=%v  writer-dry-run=%v\n\n", w.Endpoint, w.ProjectID, w.AuthHeader != "", w.DryRun)
+	fmt.Fprintf(out, "Writing through the router GraphQL  project=%s  writer-dry-run=%v\n\n", w.ProjectID, w.DryRun)
 
 	cur := derive.LoadCursor()
 	byKind := map[derive.Kind]int{}
@@ -186,8 +186,8 @@ func runHook(cmd *cobra.Command) error {
 }
 
 // buildWriter resolves the write endpoint (like `sync`: --server-url / QUORUM_SERVER_URL / login
-// config; prod by default, localhost for devs), best-effort Bearer, and project (active workspace
-// unless --project). Core is never targeted directly — writes go through the public /sync/import route.
+// config; prod by default, localhost for devs) and project (active workspace unless --project), and
+// builds the authenticated router GraphQL client — writes go through memoryImport, never core directly.
 func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 	out := cmd.OutOrStdout()
 	writerDry, _ := cmd.Flags().GetBool("writer-dry-run")
@@ -200,12 +200,15 @@ func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 	if project == "" {
 		return nil, fmt.Errorf("no project: pass --project, set project_id in .quorum.json (`flmnt setup --project`), or select an active workspace")
 	}
+	gql, err := graphQLClientFor(cmd, serverURL)
+	if err != nil {
+		return nil, err
+	}
 	return &derive.Writer{
-		Endpoint:   serverURL,
-		ProjectID:  project,
-		AuthHeader: bestEffortBearer(cmd, serverURL),
-		DryRun:     writerDry,
-		Log:        func(s string) { fmt.Fprintln(out, s) },
+		GQL:       gql,
+		ProjectID: project,
+		DryRun:    writerDry,
+		Log:       func(s string) { fmt.Fprintln(out, s) },
 	}, nil
 }
 
@@ -241,7 +244,7 @@ func init() {
 	deriveCmd.Flags().Bool("dry-run", true, "Inventory only — read-only, no writes (default mode)")
 	deriveCmd.Flags().String("repo", "", "Repo path to derive from (default: current directory)")
 	deriveCmd.Flags().String("out", "", "Write candidate JSONL to this path (one SessionDerivation per line)")
-	deriveCmd.Flags().Bool("write", false, "Write derived candidates to flmnt via the /sync/import route (Phase 3)")
+	deriveCmd.Flags().Bool("write", false, "Write derived candidates to flmnt through the router GraphQL (memoryImport)")
 	deriveCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; pass http://localhost:3000 for a local stack)")
 	deriveCmd.Flags().String("project", "", "flmnt project id to write into (default: active workspace)")
 	deriveCmd.Flags().String("session", "", "Restrict to one main session (id prefix)")

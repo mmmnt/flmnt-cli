@@ -1,18 +1,15 @@
 package derive
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
+
+	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 )
 
-// eventEnvelope mirrors the core entry shape /sync/import accepts (full-fidelity: ids/timestamps
+// eventEnvelope mirrors the core entry shape memoryImport accepts (full-fidelity: ids/timestamps
 // preserved; payload.causal_refs drive CAUSED_BY edges).
 type eventEnvelope struct {
 	CorrelationID string         `json:"correlationId"`
@@ -34,18 +31,15 @@ type importResult struct {
 	Skipped      int    `json:"skipped"`
 }
 
-// Writer persists a derivation to a flmnt endpoint via the authenticated /sync/import route — the
-// same path `sync push` uses, so core stays private. The endpoint is resolved by the caller (prod
-// by default; localhost for devs); AuthHeader is "Bearer <token>" for remote, "" for a local stack.
-// correlationIds are deterministic (hash of the candidate's local id) so re-import dedups to a no-op
-// and causal_refs resolve without any server round-trip.
+// Writer persists a derivation through the authenticated router GraphQL (memoryImport) — the same op
+// `sync push` uses, so core stays private and the router enforces the caller's rights to the workspace.
+// GQL is the authenticated client; correlationIds are deterministic (hash of the candidate's local id)
+// so re-import dedups to a no-op and causal_refs resolve without any server round-trip.
 type Writer struct {
-	Endpoint   string
-	ProjectID  string
-	AuthHeader string
-	DryRun     bool
-	HTTP       *http.Client
-	Log        func(string)
+	GQL       *apiclient.Client
+	ProjectID string
+	DryRun    bool
+	Log       func(string)
 }
 
 // WriteResult summarizes a session write.
@@ -55,12 +49,7 @@ type WriteResult struct {
 	ByKind   map[Kind]int
 }
 
-func (w *Writer) client() *http.Client {
-	if w.HTTP != nil {
-		return w.HTTP
-	}
-	return &http.Client{Timeout: 60 * time.Second}
-}
+const importMutation = `mutation($projectId: ID!, $streams: [MemoryStreamImportInput!]!){ memoryImport(projectId: $projectId, streams: $streams){ imported { streamSuffix appended skipped } } }`
 
 // deterministicID derives a stable UUID-shaped id from a seed, so re-runs produce identical
 // correlationIds (idempotent import) and causal_refs resolve to the same targets.
@@ -92,18 +81,17 @@ func (w *Writer) WriteSession(d SessionDerivation) (WriteResult, error) {
 	if len(mistake) > 0 {
 		batches = append(batches, streamBatch{StreamSuffix: "mistake", Events: mistake})
 	}
-	body := map[string]any{"project_id": w.ProjectID, "streams": batches}
 
 	if w.DryRun {
 		if w.Log != nil {
-			raw, _ := json.MarshalIndent(body, "", "  ")
+			raw, _ := json.MarshalIndent(map[string]any{"projectId": w.ProjectID, "streams": batches}, "", "  ")
 			w.Log(string(raw))
 		}
 		res.Appended = len(domain) + len(mistake)
 		return res, nil
 	}
 
-	imported, err := w.postImport(body)
+	imported, err := w.postImport(batches)
 	if err != nil {
 		return res, err
 	}
@@ -153,7 +141,7 @@ func entryType(k Kind) string {
 	switch k {
 	case KindKeyframe:
 		// NOT "keyframe.written" — a derived per-session recap must not shadow the project's real
-		// curated keyframe (which /keyframes/latest returns). The brief surfaces it as a fallback.
+		// curated keyframe (which memoryKeyframe returns). The brief surfaces it as a fallback.
 		return "session.recap"
 	case KindMistake:
 		return "decision.mistake"
@@ -164,44 +152,24 @@ func entryType(k Kind) string {
 	}
 }
 
-func (w *Writer) postImport(body map[string]any) ([]importResult, error) {
-	raw, _ := json.Marshal(body)
-	url := syncBaseURL(w.Endpoint) + "/sync/import"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if w.AuthHeader != "" {
-		req.Header.Set("Authorization", w.AuthHeader)
-	}
-	if w.ProjectID != "" {
-		req.Header.Set("X-Workspace-Id", w.ProjectID) // the remote proxy requires workspace selection
-	}
-	resp, err := w.client().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("%s -> %d: %s", url, resp.StatusCode, string(b))
+// postImport runs memoryImport, serializing each stream's events into the JSON string the mutation
+// expects.
+func (w *Writer) postImport(batches []streamBatch) ([]importResult, error) {
+	streams := make([]map[string]any, 0, len(batches))
+	for _, b := range batches {
+		ev, err := json.Marshal(b.Events)
+		if err != nil {
+			return nil, err
+		}
+		streams = append(streams, map[string]any{"streamSuffix": b.StreamSuffix, "events": string(ev)})
 	}
 	var out struct {
-		Imported []importResult `json:"imported"`
+		MemoryImport struct {
+			Imported []importResult `json:"imported"`
+		} `json:"memoryImport"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := w.GQL.Query(importMutation, map[string]any{"projectId": w.ProjectID, "streams": streams}, &out); err != nil {
 		return nil, err
 	}
-	return out.Imported, nil
-}
-
-// syncBaseURL normalizes a server/MCP URL to the base the /sync routes live on (strips a trailing
-// /mcp or /sse), mirroring the CLI's sync transport.
-func syncBaseURL(raw string) string {
-	s := strings.TrimRight(raw, "/")
-	for _, suf := range []string{"/mcp", "/sse"} {
-		s = strings.TrimSuffix(s, suf)
-	}
-	return strings.TrimRight(s, "/")
+	return out.MemoryImport.Imported, nil
 }
