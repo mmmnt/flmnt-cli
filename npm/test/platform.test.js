@@ -7,8 +7,28 @@ import {
 	binaryName,
 	binPath,
 	downloadURL,
+	checksumsURL,
+	expectedChecksum,
 	shouldInstall,
 } from '../src/platform.js';
+
+describe('checksumsURL', () => {
+	it('points at the release checksums file', () => {
+		expect(checksumsURL('mmmnt/flmnt-cli', '1.2.3')).toBe(
+			'https://github.com/mmmnt/flmnt-cli/releases/download/v1.2.3/flmnt_1.2.3_checksums.txt',
+		);
+	});
+});
+
+describe('expectedChecksum', () => {
+	const txt = 'aaa  flmnt_1.2.3_darwin_arm64.tar.gz\nbbb  flmnt_1.2.3_linux_amd64.tar.gz';
+	it('returns the hash for the matching asset', () => {
+		expect(expectedChecksum(txt, 'flmnt_1.2.3_linux_amd64.tar.gz')).toBe('bbb');
+	});
+	it('returns null when no line matches the asset', () => {
+		expect(expectedChecksum(txt, 'flmnt_1.2.3_windows_amd64.zip')).toBeNull();
+	});
+});
 
 describe('target', () => {
 	it('maps darwin/arm64 to goreleaser darwin/arm64', () => {

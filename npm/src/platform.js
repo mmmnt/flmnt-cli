@@ -33,6 +33,21 @@ export function downloadURL(repo, version, asset) {
 	return `https://github.com/${repo}/releases/download/v${version}/${asset}`;
 }
 
+export function checksumsURL(repo, version) {
+	return `https://github.com/${repo}/releases/download/v${version}/flmnt_${version}_checksums.txt`;
+}
+
+// Extract the expected sha256 for `asset` from a goreleaser checksums.txt (lines: "<hash>  <asset>").
+export function expectedChecksum(checksumsText, asset) {
+	for (const line of checksumsText.split('\n')) {
+		const [hash, name] = line.trim().split(/\s+/);
+		if (name === asset) {
+			return hash;
+		}
+	}
+	return null;
+}
+
 export function shouldInstall(version, env) {
 	if (env.FLMNT_SKIP_DOWNLOAD) {
 		return false;

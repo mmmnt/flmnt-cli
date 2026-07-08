@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
 	chmodSync,
 	mkdirSync,
@@ -11,7 +12,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assetName, binaryName, downloadURL, shouldInstall, target } from '../src/platform.js';
+import { assetName, binaryName, checksumsURL, downloadURL, expectedChecksum, shouldInstall, target } from '../src/platform.js';
 
 const REPO = 'mmmnt/flmnt-cli';
 
@@ -33,6 +34,20 @@ async function main() {
 		throw new Error(`download failed: HTTP ${res.status} for ${url}`);
 	}
 	const buf = Buffer.from(await res.arrayBuffer());
+
+	// Verify the download against the published release checksums before trusting the binary.
+	const sumsRes = await fetch(checksumsURL(REPO, pkg.version), { redirect: 'follow' });
+	if (!sumsRes.ok) {
+		throw new Error(`checksum download failed: HTTP ${sumsRes.status}`);
+	}
+	const expected = expectedChecksum(await sumsRes.text(), asset);
+	if (!expected) {
+		throw new Error(`no published checksum for ${asset}`);
+	}
+	const actual = createHash('sha256').update(buf).digest('hex');
+	if (actual !== expected) {
+		throw new Error(`checksum mismatch for ${asset}: expected ${expected}, got ${actual}`);
+	}
 
 	const tmp = mkdtempSync(path.join(os.tmpdir(), 'flmnt-'));
 	try {
