@@ -38,7 +38,29 @@ func discoverOAuth(serverURL string) (oauthDiscovery, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return oauthDiscovery{}, err
 	}
+	for _, ep := range []string{doc.AuthorizationEndpoint, doc.TokenEndpoint, doc.DeviceAuthorizationEndpoint, doc.GraphqlEndpoint} {
+		if !secureEndpoint(ep) {
+			return oauthDiscovery{}, fmt.Errorf("discovery advertised an insecure endpoint: %s", ep)
+		}
+	}
 	return doc, nil
+}
+
+// secureEndpoint accepts an https URL, or an http URL only when the host is loopback (local dev). A
+// tampered discovery document could otherwise point the token/refresh POST at a cleartext http host.
+func secureEndpoint(raw string) bool {
+	if raw == "" {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	host := u.Hostname()
+	return u.Scheme == "http" && (host == "localhost" || host == "127.0.0.1" || host == "::1")
 }
 
 func firstNonEmpty(vals ...string) string {

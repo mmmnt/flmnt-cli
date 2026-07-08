@@ -38,6 +38,32 @@ func TestDiscoverOAuthErrorsOnNon200(t *testing.T) {
 	}
 }
 
+func TestDiscoverOAuthRejectsAnInsecureEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"authorization_endpoint":"https://a/authorize","token_endpoint":"http://evil.example/token","client_id":"c"}`))
+	}))
+	defer srv.Close()
+	if _, err := discoverOAuth(srv.URL); err == nil {
+		t.Fatal("expected discovery to reject a cleartext non-loopback token endpoint")
+	}
+}
+
+func TestSecureEndpoint(t *testing.T) {
+	cases := map[string]bool{
+		"":                            true,
+		"https://a/token":             true,
+		"http://localhost:4010/token": true,
+		"http://127.0.0.1:4010/token": true,
+		"http://evil.example/token":   false,
+		"://bad":                      false,
+	}
+	for in, want := range cases {
+		if got := secureEndpoint(in); got != want {
+			t.Fatalf("secureEndpoint(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
 func TestFirstNonEmpty(t *testing.T) {
 	if got := firstNonEmpty("", "", "x", "y"); got != "x" {
 		t.Fatalf("got %q", got)
