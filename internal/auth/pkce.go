@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 type PKCEConfig struct {
@@ -113,7 +115,7 @@ func exchangeCode(cfg PKCEConfig, code, verifier string) (TokenSet, error) {
 		"redirect_uri":  {cfg.RedirectURI},
 		"code_verifier": {verifier},
 	}
-	resp, err := http.Post(cfg.TokenURL, "application/x-www-form-urlencoded",
+	resp, err := httpx.Client.Post(cfg.TokenURL, "application/x-www-form-urlencoded",
 		strings.NewReader(body.Encode()))
 	if err != nil {
 		return TokenSet{}, err

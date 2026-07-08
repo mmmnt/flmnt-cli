@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 func MapWorkspaceError(err error) error {
@@ -45,7 +47,7 @@ func New(endpoint, accessToken string) *Client {
 	return &Client{
 		endpoint:    endpoint,
 		accessToken: accessToken,
-		httpClient:  http.DefaultClient,
+		httpClient:  httpx.Client,
 	}
 }
 

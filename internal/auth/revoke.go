@@ -3,9 +3,10 @@ package auth
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 func RevokeRefreshToken(revokeURL, clientID, refreshToken string) error {
@@ -16,7 +17,7 @@ func RevokeRefreshToken(revokeURL, clientID, refreshToken string) error {
 		"token":     {refreshToken},
 		"client_id": {clientID},
 	}
-	resp, err := http.Post(revokeURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
+	resp, err := httpx.Client.Post(revokeURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
 	if err != nil {
 		return err
 	}

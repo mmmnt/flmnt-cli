@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 type DeviceConfig struct {
@@ -72,7 +74,7 @@ func requestDeviceAuthorization(cfg DeviceConfig) (DeviceAuthResponse, error) {
 		"client_id": {cfg.ClientID},
 		"scope":     {cfg.Scope},
 	}
-	resp, err := http.Post(cfg.DeviceURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
+	resp, err := httpx.Client.Post(cfg.DeviceURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
 	if err != nil {
 		return DeviceAuthResponse{}, err
 	}
@@ -101,7 +103,7 @@ func pollDeviceToken(cfg DeviceConfig, deviceCode string) (TokenSet, error) {
 		"device_code": {deviceCode},
 		"client_id":   {cfg.ClientID},
 	}
-	resp, err := http.Post(cfg.TokenURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
+	resp, err := httpx.Client.Post(cfg.TokenURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
 	if err != nil {
 		return TokenSet{}, &devicePollError{code: "network_error", msg: err.Error()}
 	}

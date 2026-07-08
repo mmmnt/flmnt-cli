@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 var ErrRefreshExpired = errors.New("refresh token expired or revoked; run `flmnt login`")
@@ -18,7 +20,7 @@ func RefreshAccessToken(tokenURL, clientID, refreshToken string) (TokenSet, erro
 		"client_id":     {clientID},
 		"refresh_token": {refreshToken},
 	}
-	resp, err := http.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
+	resp, err := httpx.Client.Post(tokenURL, "application/x-www-form-urlencoded", strings.NewReader(body.Encode()))
 	if err != nil {
 		return TokenSet{}, err
 	}

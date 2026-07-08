@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 type oauthDiscovery struct {
@@ -24,7 +25,7 @@ func discoverOAuth(serverURL string) (oauthDiscovery, error) {
 		return oauthDiscovery{}, err
 	}
 	origin := u.Scheme + "://" + u.Host
-	resp, err := http.Get(origin + "/.well-known/oauth-authorization-server")
+	resp, err := httpx.Client.Get(origin + "/.well-known/oauth-authorization-server")
 	if err != nil {
 		return oauthDiscovery{}, err
 	}
