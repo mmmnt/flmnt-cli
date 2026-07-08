@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io/fs"
 	"net/url"
+	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/99designs/keyring"
 )
@@ -180,8 +182,25 @@ func effectiveBackend() keyring.BackendType {
 	return keyring.FileBackend
 }
 
+// goosForKeychain names the platform for keychain selection; a var so tests can force either path.
+var goosForKeychain = runtime.GOOS
+
+// usingSecurityKeychain reports whether the token store should shell to the macOS `security` CLI
+// (a real login-Keychain backend) instead of keyring.Open. True only on darwin where the binary
+// exists — every release build is CGO-free, so this is the only path to the real Keychain on macOS.
+func usingSecurityKeychain() bool {
+	if goosForKeychain != "darwin" {
+		return false
+	}
+	_, err := os.Stat(securityBin)
+	return err == nil
+}
+
 // StorageDescription names where SaveToken/LoadToken persist the token on this build/platform.
 func StorageDescription() string {
+	if usingSecurityKeychain() {
+		return "the macOS Keychain"
+	}
 	fileDir := ""
 	if dir, err := ConfigDir(); err == nil {
 		fileDir = filepath.Join(dir, "keyring")
@@ -208,5 +227,8 @@ func keychainConfig() keyring.Config {
 }
 
 var openKeyring = func() (keyring.Keyring, error) {
+	if usingSecurityKeychain() {
+		return newSecurityKeyring(), nil
+	}
 	return keyring.Open(keychainConfig())
 }
