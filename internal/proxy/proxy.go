@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
 type Config struct {
@@ -51,10 +52,26 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"status":"ok","authenticated":%v}`, token != "")
 }
 
+// ListenAddr binds the proxy to loopback only. Because the proxy injects the user's bearer token on
+// every forwarded request, it must never be reachable off the local host.
+func ListenAddr(port int) string {
+	return fmt.Sprintf("127.0.0.1:%d", port)
+}
+
+// newServer builds the proxy's HTTP server with a ReadHeaderTimeout so a slow client cannot hold a
+// connection open indefinitely (Slowloris).
+func newServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+}
+
 func ListenAndServe(addr string, cfg Config) error {
 	h, err := New(cfg)
 	if err != nil {
 		return err
 	}
-	return http.ListenAndServe(addr, h)
+	return newServer(addr, h).ListenAndServe()
 }

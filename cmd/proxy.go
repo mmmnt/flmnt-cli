@@ -30,7 +30,7 @@ and injects Authorization: Bearer headers on outbound MCP requests.
 			return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or flmnt setup must provide a server URL")
 		}
 
-		addr := fmt.Sprintf(":%d", port)
+		addr := proxy.ListenAddr(port)
 		fmt.Fprintf(cmd.OutOrStdout(), "flmnt proxy listening on %s → %s\n", addr, serverURL)
 
 		return proxy.ListenAndServe(addr, proxy.Config{
