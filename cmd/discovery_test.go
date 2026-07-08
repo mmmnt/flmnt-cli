@@ -38,6 +38,27 @@ func TestDiscoverOAuthErrorsOnNon200(t *testing.T) {
 	}
 }
 
+func TestDiscoverOAuthParsesRevocationEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"authorization_endpoint":"https://a/authorize","token_endpoint":"https://a/token","revocation_endpoint":"https://a/revoke","client_id":"c"}`))
+	}))
+	defer srv.Close()
+	doc, err := discoverOAuth(srv.URL)
+	if err != nil || doc.RevocationEndpoint != "https://a/revoke" {
+		t.Fatalf("revocation_endpoint = %q err %v", doc.RevocationEndpoint, err)
+	}
+}
+
+func TestDiscoverOAuthRejectsAnInsecureRevocationEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"authorization_endpoint":"https://a/authorize","token_endpoint":"https://a/token","revocation_endpoint":"http://evil.example/revoke","client_id":"c"}`))
+	}))
+	defer srv.Close()
+	if _, err := discoverOAuth(srv.URL); err == nil {
+		t.Fatal("expected rejection of a cleartext revocation endpoint")
+	}
+}
+
 func TestDiscoverOAuthRejectsAnInsecureEndpoint(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"authorization_endpoint":"https://a/authorize","token_endpoint":"http://evil.example/token","client_id":"c"}`))

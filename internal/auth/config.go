@@ -15,6 +15,7 @@ type CLIConfig struct {
 	ClientID            string `json:"client_id,omitempty"`
 	TokenURL            string `json:"token_url,omitempty"`
 	AuthURL             string `json:"auth_url,omitempty"`
+	RevocationEndpoint  string `json:"revocation_endpoint,omitempty"`
 }
 
 func ConfigDir() (string, error) {

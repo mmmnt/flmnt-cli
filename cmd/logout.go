@@ -18,6 +18,16 @@ var logoutCmd = &cobra.Command{
 		}
 		revokeURL, _ := cmd.Flags().GetString("revoke-url")
 		clientID, _ := cmd.Flags().GetString("client-id")
+		// Revoke by default: fall back to the endpoint + client id persisted at login (discovered from
+		// the broker's revocation_endpoint) so `flmnt logout` invalidates the refresh token server-side
+		// without requiring flags.
+		if revokeURL == "" || clientID == "" || serverURL == "" {
+			if cfg, err := auth.LoadConfig(); err == nil {
+				revokeURL = firstNonEmpty(revokeURL, cfg.RevocationEndpoint)
+				clientID = firstNonEmpty(clientID, cfg.ClientID)
+				serverURL = firstNonEmpty(serverURL, cfg.ServerURL)
+			}
+		}
 
 		var refreshToken string
 		if serverURL != "" {

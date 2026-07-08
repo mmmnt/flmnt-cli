@@ -15,6 +15,7 @@ type oauthDiscovery struct {
 	AuthorizationEndpoint       string `json:"authorization_endpoint"`
 	TokenEndpoint               string `json:"token_endpoint"`
 	DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
+	RevocationEndpoint          string `json:"revocation_endpoint"`
 	ClientID                    string `json:"client_id"`
 	GraphqlEndpoint             string `json:"graphql_endpoint"`
 }
@@ -38,7 +39,7 @@ func discoverOAuth(serverURL string) (oauthDiscovery, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return oauthDiscovery{}, err
 	}
-	for _, ep := range []string{doc.AuthorizationEndpoint, doc.TokenEndpoint, doc.DeviceAuthorizationEndpoint, doc.GraphqlEndpoint} {
+	for _, ep := range []string{doc.AuthorizationEndpoint, doc.TokenEndpoint, doc.DeviceAuthorizationEndpoint, doc.RevocationEndpoint, doc.GraphqlEndpoint} {
 		if !secureEndpoint(ep) {
 			return oauthDiscovery{}, fmt.Errorf("discovery advertised an insecure endpoint: %s", ep)
 		}

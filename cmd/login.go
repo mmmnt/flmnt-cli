@@ -40,11 +40,13 @@ var loginCmd = &cobra.Command{
 		cfg, _ := loginLoadConfig()
 		authURL, tokenURL, clientID := resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, oauthDiscovery{})
 		deviceURL := firstNonEmpty(flagDevice, envOr("QUORUM_DEVICE_URL", ""))
+		revocationEndpoint := cfg.RevocationEndpoint
 
 		if tokenURL == "" || clientID == "" || (device && deviceURL == "") || (!device && authURL == "") {
 			doc, _ := loginDiscover(serverURL)
 			authURL, tokenURL, clientID = resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, doc)
 			deviceURL = firstNonEmpty(deviceURL, doc.DeviceAuthorizationEndpoint)
+			revocationEndpoint = firstNonEmpty(revocationEndpoint, doc.RevocationEndpoint)
 		}
 
 		var tokens auth.TokenSet
@@ -89,6 +91,7 @@ var loginCmd = &cobra.Command{
 		cfg.AuthURL = authURL
 		cfg.TokenURL = tokenURL
 		cfg.ClientID = clientID
+		cfg.RevocationEndpoint = revocationEndpoint
 		_ = loginSaveConfig(cfg)
 		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Token stored in "+auth.StorageDescription()+".")
 		return nil
