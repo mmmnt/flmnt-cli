@@ -90,7 +90,7 @@ var loginCmd = &cobra.Command{
 		cfg.TokenURL = tokenURL
 		cfg.ClientID = clientID
 		_ = loginSaveConfig(cfg)
-		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Token stored in OS keychain.")
+		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Token stored in "+auth.StorageDescription()+".")
 		return nil
 	},
 }

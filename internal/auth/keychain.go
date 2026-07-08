@@ -151,6 +151,44 @@ func DeleteToken(projectURL string) error {
 
 func filePassword(string) (string, error) { return keychainService, nil }
 
+// describeStorage is a human phrase for where the token is persisted, given the keyring backend that
+// will actually be used. Release builds are CGO-free, so the macOS Keychain backend is compiled out
+// and the token lands in the encrypted file backend — the login output must say so, not claim the OS
+// keychain.
+func describeStorage(backend keyring.BackendType, fileDir string) string {
+	if backend == keyring.FileBackend {
+		if fileDir != "" {
+			return "an encrypted file in " + fileDir
+		}
+		return "an encrypted file under ~/.filament/keyring"
+	}
+	return "the OS keychain"
+}
+
+// effectiveBackend reports the first configured backend that is actually available on this
+// build/platform — the one keyring.Open will select.
+func effectiveBackend() keyring.BackendType {
+	available := make(map[keyring.BackendType]bool)
+	for _, b := range keyring.AvailableBackends() {
+		available[b] = true
+	}
+	for _, b := range keychainConfig().AllowedBackends {
+		if available[b] {
+			return b
+		}
+	}
+	return keyring.FileBackend
+}
+
+// StorageDescription names where SaveToken/LoadToken persist the token on this build/platform.
+func StorageDescription() string {
+	fileDir := ""
+	if dir, err := ConfigDir(); err == nil {
+		fileDir = filepath.Join(dir, "keyring")
+	}
+	return describeStorage(effectiveBackend(), fileDir)
+}
+
 func keychainConfig() keyring.Config {
 	fileDir := ""
 	if dir, err := ConfigDir(); err == nil {
