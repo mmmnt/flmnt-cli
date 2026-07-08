@@ -46,13 +46,15 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # node 24 bundles npm 11.16+ (needed for OIDC trusted publishing) with sigstore intact.
+          # Do NOT `npm install -g npm@latest`: that in-place global upgrade strands the sigstore
+          # module the `--provenance` path requires, which is what broke the v1.9.0 npm publish.
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish npm wrapper (@mmmnt/flmnt)
         working-directory: npm
         run: |
-          npm install -g npm@latest
           VERSION="${GITHUB_REF_NAME#v}"
           npm version "$VERSION" --no-git-tag-version
           npm publish --access public --provenance
