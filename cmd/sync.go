@@ -9,9 +9,24 @@ import (
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/mmmnt/flmnt-cli/internal/sync"
 	"github.com/spf13/cobra"
 )
+
+// resolveAuthCmd chooses the local auth-header command. An explicit --local-auth-cmd is honored
+// verbatim; the repo-relative default (defaultLocalAuthCmd) runs ONLY inside a configured flmnt
+// project (a .quorum.json in the working directory), so `flmnt sync` in an unrelated repo cannot
+// auto-execute that repo's script via the SessionEnd hook.
+func resolveAuthCmd(flagVal, dir string) (string, error) {
+	if flagVal != "" {
+		return flagVal, nil
+	}
+	if _, err := setup.LoadProjectConfig(dir); err != nil {
+		return "", fmt.Errorf("no --local-auth-cmd and no .quorum.json in the working directory; refusing to run the default cwd script %q (run `flmnt setup` here or pass --local-auth-cmd)", defaultLocalAuthCmd)
+	}
+	return defaultLocalAuthCmd, nil
+}
 
 const (
 	defaultLocalURL       = "http://localhost:8000"
@@ -146,9 +161,10 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	if workspace == "" {
 		workspace = defaultLocalWorkspace
 	}
-	authCmd, _ := cmd.Flags().GetString("local-auth-cmd")
-	if authCmd == "" {
-		authCmd = defaultLocalAuthCmd
+	authCmdFlag, _ := cmd.Flags().GetString("local-auth-cmd")
+	authCmd, err := resolveAuthCmd(authCmdFlag, "")
+	if err != nil {
+		return sync.Endpoint{}, err
 	}
 	authValue, err := runAuthHelper(authCmd)
 	if err != nil {
@@ -187,7 +203,7 @@ func init() {
 		c.Flags().String("remote-workspace", "", "Remote workspace id (default: active workspace)")
 		c.Flags().String("local-url", defaultLocalURL, "Local MCP server URL")
 		c.Flags().String("local-workspace", defaultLocalWorkspace, "Local workspace id")
-		c.Flags().String("local-auth-cmd", defaultLocalAuthCmd, "Command that prints local MCP auth headers as JSON")
+		c.Flags().String("local-auth-cmd", "", "Command that prints local MCP auth headers as JSON (defaults to "+defaultLocalAuthCmd+" only inside a configured flmnt project)")
 		c.Flags().String("cursor-file", "", "Path to the sync cursor file (default: ~/.filament/sync-cursors.json)")
 	}
 	syncCmd.AddCommand(syncPushCmd)
