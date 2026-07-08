@@ -30,6 +30,7 @@ type ProjectConfig struct {
 //   - proxyServerName: a localhost entry served by `flmnt proxy`, which injects the bearer from
 //     `flmnt login`. Opt-in (--proxy) for clients/environments that can't do OAuth (CI, headless,
 //     non-OAuth MCP clients).
+//
 // Distinct names so setup never collides with a user's own `quorum` server.
 const (
 	directServerName = "flmnt"
@@ -225,9 +226,9 @@ func buildHooks(cfg Config) map[string][]hookMatcher {
 			script("supersession-detect.sh"),
 			script("mcp-search-reminder.sh"),
 		}}},
-		"PreToolUse": {{Matcher: "mcp__flmnt__record_decision", Hooks: []hookEntry{script("causal-ref-gate.sh")}}},
-		"PostToolUse": {{Matcher: "Bash", Hooks: []hookEntry{cmd("flmnt record-metric --hook")}}},
-		"PreCompact": {{Matcher: "", Hooks: []hookEntry{script("precompact-checkpoint.sh"), cmd("flmnt derive --write || true")}}},
+		"PreToolUse":   {{Matcher: "mcp__flmnt__record_decision", Hooks: []hookEntry{script("causal-ref-gate.sh")}}},
+		"PostToolUse":  {{Matcher: "Bash", Hooks: []hookEntry{cmd("flmnt record-metric --hook")}}},
+		"PreCompact":   {{Matcher: "", Hooks: []hookEntry{script("precompact-checkpoint.sh"), cmd("flmnt derive --write || true")}}},
 		"SubagentStop": {{Matcher: "", Hooks: []hookEntry{cmd("flmnt derive --hook || true")}}},
 		"Stop":         {{Matcher: "", Hooks: []hookEntry{cmd(derive)}}},
 		"SessionEnd":   {{Matcher: "", Hooks: []hookEntry{cmd("flmnt derive --write || true"), cmd("flmnt sync push || true")}}},
