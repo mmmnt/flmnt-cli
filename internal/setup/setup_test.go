@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -193,5 +194,19 @@ func TestRunPreservesExistingSettingsAndMergesPermissions(t *testing.T) {
 	}
 	if !has("mcp__flmnt__record_metric") {
 		t.Fatal("did not merge kit tool into allow")
+	}
+}
+
+func TestPrecompactHookNeverFabricatesStreamIDs(t *testing.T) {
+	b, err := assets.ReadFile("assets/hooks/precompact-checkpoint.sh")
+	if err != nil {
+		t.Fatalf("read embedded hook: %v", err)
+	}
+	script := string(b)
+	if strings.Contains(script, `${_root//\//-}`) {
+		t.Fatal("precompact hook derives a stream id from the filesystem path; stream ids are strict and must be resolved via list_streams")
+	}
+	if !strings.Contains(script, "list_streams") {
+		t.Fatal("precompact hook must direct the model to resolve stream ids via list_streams")
 	}
 }
