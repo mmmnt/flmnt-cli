@@ -74,8 +74,8 @@ func firstNonEmpty(vals ...string) string {
 }
 
 func resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient string, cfg auth.CLIConfig, doc oauthDiscovery) (authURL, tokenURL, clientID string) {
-	authURL = firstNonEmpty(flagAuth, cfg.AuthURL, doc.AuthorizationEndpoint)
-	tokenURL = firstNonEmpty(flagToken, cfg.TokenURL, doc.TokenEndpoint)
-	clientID = firstNonEmpty(flagClient, envClient, cfg.ClientID, doc.ClientID)
+	authURL = firstNonEmpty(flagAuth, doc.AuthorizationEndpoint, cfg.AuthURL)
+	tokenURL = firstNonEmpty(flagToken, doc.TokenEndpoint, cfg.TokenURL)
+	clientID = firstNonEmpty(flagClient, envClient, doc.ClientID, cfg.ClientID)
 	return
 }

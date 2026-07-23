@@ -38,16 +38,15 @@ var loginCmd = &cobra.Command{
 		envClient := envOr("QUORUM_CLIENT_ID", "")
 
 		cfg, _ := loginLoadConfig()
-		authURL, tokenURL, clientID := resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, oauthDiscovery{})
-		deviceURL := firstNonEmpty(flagDevice, envOr("QUORUM_DEVICE_URL", ""))
-		revocationEndpoint := cfg.RevocationEndpoint
-
-		if tokenURL == "" || clientID == "" || (device && deviceURL == "") || (!device && authURL == "") {
-			doc, _ := loginDiscover(serverURL)
-			authURL, tokenURL, clientID = resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, doc)
-			deviceURL = firstNonEmpty(deviceURL, doc.DeviceAuthorizationEndpoint)
-			revocationEndpoint = firstNonEmpty(revocationEndpoint, doc.RevocationEndpoint)
-		}
+		// Always re-discover: the server's advertised authorization server is authoritative, so a moved
+		// broker (new DNS) is picked up even when config.json still caches the old endpoints. Discovery
+		// outranks the cache in resolveLoginEndpoints; flags/env still win, and a failed discovery falls
+		// back to the cache. Without this a stale cache silently re-auths against the retired broker,
+		// minting tokens the resource server rejects ("login doesn't stick").
+		doc, _ := loginDiscover(serverURL)
+		authURL, tokenURL, clientID := resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, doc)
+		deviceURL := firstNonEmpty(flagDevice, envOr("QUORUM_DEVICE_URL", ""), doc.DeviceAuthorizationEndpoint)
+		revocationEndpoint := firstNonEmpty(doc.RevocationEndpoint, cfg.RevocationEndpoint)
 
 		var tokens auth.TokenSet
 		if device {
