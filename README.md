@@ -50,15 +50,26 @@ Prebuilt binaries for macOS, Linux, and Windows (amd64/arm64) are attached to ea
 Authenticate, pick a workspace, and wire Claude Code to your flmnt MCP:
 
 ```sh
-flmnt login                              # OAuth2 — browser PKCE (or --device for headless)
-flmnt workspace use <name|id>            # set the active workspace
-flmnt setup --server-url <flmnt-url>     # write .mcp.json + the keyframe-gate hook
+flmnt login                                        # OAuth2 — browser PKCE (or --device for headless)
+flmnt setup --server-url <flmnt-url> --project <name>   # wire this repo to a workspace
 ```
+
+`--project` names the workspace **this repo** records into, by name — you do not need its id.
+It is required, and it is the whole point: without it a repo falls back to the machine-wide
+active workspace, so whichever workspace you last ran `flmnt workspace use` on decides where
+every repo's sessions are written. One project's prompts and recaps land in another project's
+stream, and `flmnt brief` opens sessions with the wrong project's state.
+
+Once set, the repo is pinned: every hook targets that workspace regardless of what the CLI is
+pointed at elsewhere. Setup prints which workspace it chose.
 
 `flmnt setup` writes a project-local `.mcp.json` pointing at the local proxy plus a
 `.claude/settings.local.json` UserPromptSubmit hook, then `flmnt proxy` injects your
 bearer token on outbound MCP requests — so Claude Code talks to a live, authenticated
 flmnt MCP without you handling tokens by hand. `setup` is idempotent.
+
+`flmnt workspace use <name|id>` sets the ACTIVE workspace, which is a per-machine convenience
+for ad-hoc commands — it does not decide where a configured repo records.
 
 ## Commands
 
@@ -82,8 +93,10 @@ flmnt workspace add-member       # add a member to a workspace you own
 flmnt workspace remove-member    # remove a member from a workspace you own
 
 # MCP / Claude Code integration
-flmnt setup --server-url <url>   # install the automation kit: .mcp.json + full lifecycle hook map
+flmnt setup --server-url <url> --project <name|id>
+                                 # install the automation kit: .mcp.json + full lifecycle hook map
                                  # + .claude/commands/flmnt-* slash commands + tool permissions (idempotent)
+                                 # --project is REQUIRED and pins THIS repo to that workspace
 flmnt proxy                      # run the local MCP proxy (injects Authorization: Bearer)
 flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.json headersHelper
 
