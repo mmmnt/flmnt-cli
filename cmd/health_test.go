@@ -1,13 +1,28 @@
 package cmd_test
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/mmmnt/flmnt-cli/cmd"
 	"github.com/mmmnt/flmnt-cli/internal/health"
 )
+
+func TestRenderHealthLabelsLocalScopeWhenAServiceIsDown(t *testing.T) {
+	var buf bytes.Buffer
+
+	cmd.RenderHealth(&buf, []health.Result{
+		{Service: "core", OK: false, Message: "connection refused"},
+		{Service: "proxy", OK: true, Message: "ok"},
+	})
+
+	if !strings.Contains(buf.String(), "local stack") {
+		t.Errorf("expected output to scope the failure to the local stack, got:\n%s", buf.String())
+	}
+}
 
 func TestHealthChecksOK(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
