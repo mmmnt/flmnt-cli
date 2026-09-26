@@ -26,9 +26,17 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 			return fmt.Errorf("cannot locate flmnt binary: %w", err)
 		}
 
+		// A workspace NAME is what a person knows; the id is what the config needs. Resolve the one
+		// into the other here rather than asking anybody to look up a UUID — the same resolution
+		// `flmnt workspace use` already performs. An id passed straight through still resolves.
+		projectID, projectName, err := resolveSetupProject(cmd, project)
+		if err != nil {
+			return err
+		}
+
 		cfg := setup.Config{
 			ServerURL: serverURL,
-			ProjectID: project,
+			ProjectID: projectID,
 			ProxyPort: proxyPort,
 			Proxy:     proxy,
 			GateCmd:   flmntCmd + " gate",
@@ -42,6 +50,7 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 
 		out := cmd.OutOrStdout()
 		fmt.Fprintf(out, "Setup complete — flmnt automation kit installed.\n")
+		fmt.Fprintf(out, "  project                → %s (%s) — this repo records here regardless of the active workspace\n", projectName, projectID)
 		if proxy {
 			fmt.Fprintf(out, "  .mcp.json              → flmnt-proxy @ http://localhost:%d/mcp (run `flmnt proxy`; other servers preserved)\n", proxyPort)
 		} else {
@@ -53,6 +62,21 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 		fmt.Fprintf(out, "  permissions            → flmnt MCP tools granted\n")
 		return nil
 	},
+}
+
+// resolveSetupProject turns the --project argument (a workspace NAME or an id) into the id written
+// to the repo config. Falls back to treating the argument as an id when the workspace list cannot be
+// reached, so setup still works offline against a known id.
+func resolveSetupProject(cmd *cobra.Command, arg string) (id, name string, err error) {
+	client, cerr := newWorkspaceClient(cmd)
+	if cerr != nil {
+		return arg, arg, nil
+	}
+	id, name, rerr := resolveWorkspaceID(client, arg)
+	if rerr != nil {
+		return "", "", rerr
+	}
+	return id, name, nil
 }
 
 func resolveGateCmd() (string, error) {
@@ -77,9 +101,13 @@ func resolveProject(cmd *cobra.Command, repoDir string) string {
 
 func init() {
 	setupCmd.Flags().String("server-url", "", "flmnt server URL (required)")
-	setupCmd.Flags().String("project", "", "flmnt project id for this repo (used by derive and brief)")
+	setupCmd.Flags().String("project", "", "workspace name or id this repo records into (used by brief, derive, gate and record)")
 	setupCmd.Flags().Bool("proxy", false, "wire the local-proxy entry (run `flmnt proxy`) instead of the direct OAuth entry — for CI / non-OAuth clients")
 	setupCmd.Flags().Int("proxy-port", 9876, "Local proxy port (used with --proxy)")
 	_ = setupCmd.MarkFlagRequired("server-url")
+	// Required, because the fallback it replaces was silent: a repo with no project_id resolved to
+	// the machine-wide ACTIVE workspace, so whichever repo you set up last decided where every other
+	// repo's sessions were recorded. quorum's sessions were written into howie for a day that way.
+	_ = setupCmd.MarkFlagRequired("project")
 	rootCmd.AddCommand(setupCmd)
 }
