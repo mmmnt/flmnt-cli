@@ -11,9 +11,10 @@ import (
 var briefCmd = &cobra.Command{
 	Use:   "brief",
 	Short: "SessionStart briefing — inject the project's current reasoning state from flmnt",
-	Long: "Reads the latest keyframe + recent decisions + recent mistakes for the active project and\n" +
-		"prints a compact briefing for a SessionStart hook to inject — the read half of the continuity\n" +
-		"loop. Read-only; fails quiet (prints nothing) when there's no memory or no config.",
+	Long: "Reads the latest keyframe + recent decisions + recent mistakes for the project this repo\n" +
+		"records into and prints a compact briefing for a SessionStart hook to inject — the read\n" +
+		"half of the continuity loop. Read-only; fails quiet (prints nothing) when there's no\n" +
+		"memory or no config.",
 	RunE: runBrief,
 }
 

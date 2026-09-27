@@ -186,7 +186,8 @@ func runHook(cmd *cobra.Command) error {
 }
 
 // buildWriter resolves the write endpoint (like `sync`: --server-url / QUORUM_SERVER_URL / login
-// config; prod by default, localhost for devs) and project (active workspace unless --project), and
+// config; prod by default, localhost for devs) and project (--project, else this repo's own
+// project_id, else the active workspace), and
 // builds the authenticated router GraphQL client — writes go through memoryImport, never core directly.
 func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 	out := cmd.OutOrStdout()

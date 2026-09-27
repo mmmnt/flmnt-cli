@@ -71,3 +71,19 @@ func TestSetupHelpMarksEveryRequiredFlagRequired(t *testing.T) {
 		}
 	}
 }
+
+/*
+`brief -h` described itself as reading "for the active project" — the one source that is LAST in the
+
+	resolution order and, for any repo that ran `flmnt setup --project`, not consulted at all. The
+	flag usage beneath it had already been corrected to name the repo's own setting first, so the
+	command contradicted itself in a single screen of help.
+*/
+func TestBriefDescribesTheProjectItActuallyReads(t *testing.T) {
+	if strings.Contains(briefCmd.Long, "active project") {
+		t.Errorf("brief still claims it reads the ACTIVE project, which a configured repo never uses: %q", briefCmd.Long)
+	}
+	if !strings.Contains(briefCmd.Long, "repo") {
+		t.Errorf("brief must say it reads the project this repo records into, got %q", briefCmd.Long)
+	}
+}
