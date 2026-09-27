@@ -101,7 +101,7 @@ func resolveProject(cmd *cobra.Command, repoDir string) string {
 
 func init() {
 	setupCmd.Flags().String("server-url", "", "flmnt server URL (required)")
-	setupCmd.Flags().String("project", "", "workspace name or id this repo records into (used by brief, derive, gate and record)")
+	setupCmd.Flags().String("project", "", "workspace name or id this repo records into (used by brief, derive, gate and record) (required)")
 	setupCmd.Flags().Bool("proxy", false, "wire the local-proxy entry (run `flmnt proxy`) instead of the direct OAuth entry — for CI / non-OAuth clients")
 	setupCmd.Flags().Int("proxy-port", 9876, "Local proxy port (used with --proxy)")
 	_ = setupCmd.MarkFlagRequired("server-url")

@@ -51,3 +51,23 @@ func TestEveryProjectFlagDocumentsTheRepoConfigAsTheDefault(t *testing.T) {
 		}
 	}
 }
+
+/*
+Both --server-url and --project are enforced, but only --server-url SAID so: its usage string ended
+
+	in "(required)" and --project's did not. A reader of `flmnt setup -h` counted one required flag,
+	ran the command, and got an error naming a second one. Help text that hides a requirement costs
+	the user the round trip the help was supposed to save.
+*/
+func TestSetupHelpMarksEveryRequiredFlagRequired(t *testing.T) {
+	for _, name := range []string{"server-url", "project"} {
+		f := setupCmd.Flags().Lookup(name)
+		ann := f.Annotations[cobra.BashCompOneRequiredFlag]
+		if len(ann) == 0 || ann[0] != "true" {
+			t.Fatalf("--%s: expected an enforced required flag to test against", name)
+		}
+		if !strings.Contains(f.Usage, "(required)") {
+			t.Errorf("--%s is enforced but its help does not say (required): %q", name, f.Usage)
+		}
+	}
+}
