@@ -26,11 +26,22 @@ Authenticate, pick a workspace, and wire Claude Code to your flmnt MCP:
 
 ```sh
 flmnt login                              # OAuth2 — browser PKCE (or --device for headless)
-flmnt workspace use <name|id>            # set the active workspace
-flmnt setup --server-url <flmnt-url>     # write .mcp.json + the automation kit
+flmnt setup --server-url <flmnt-url> --project <name>   # wire this repo to a workspace
 ```
 
+`--project` names the workspace **this repo** records into, by name — you do not need its id. It is required, and it pins the repo: every hook targets that workspace regardless of what the CLI is pointed at elsewhere.
+
 `flmnt setup` writes a project-local `.mcp.json` pointing at the local proxy plus a `.claude/` hook map and slash commands; `flmnt proxy` then injects your bearer token on outbound MCP requests — so Claude Code talks to a live, authenticated flmnt MCP without you handling tokens by hand. `setup` is idempotent.
+
+### Which workspace a command uses
+
+`brief`, `derive`, `gate` and `record-*` resolve the project in this order, first match wins:
+
+1. an explicit `--project <name|id>` on the command
+2. `project_id` in the repo's `.quorum.json` — written by `flmnt setup --project`
+3. the active workspace (`flmnt workspace use`)
+
+Step 3 is a fallback of last resort, not the norm: a repo that reaches it has no identity of its own, so a per-machine setting decides where its memory goes. `flmnt workspace use` remains a convenience for ad-hoc commands and does not decide where a configured repo records.
 
 ## Commands
 
@@ -52,7 +63,9 @@ flmnt workspace add-member       # add a member to a workspace you own
 flmnt workspace remove-member    # remove a member from a workspace you own
 
 # MCP / Claude Code integration
-flmnt setup --server-url <url>   # install the automation kit: .mcp.json + lifecycle hooks
+flmnt setup --server-url <url> --project <name|id>
+                                 # install the automation kit: .mcp.json + lifecycle hooks
+                                 # --project is REQUIRED and pins THIS repo to that workspace
                                  # + .claude/commands/flmnt-* slash commands (idempotent)
 flmnt proxy                      # run the local MCP proxy (injects Authorization: Bearer)
 flmnt mcp auth-header            # print MCP auth headers as JSON for .mcp.json
