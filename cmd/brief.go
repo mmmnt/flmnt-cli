@@ -41,6 +41,6 @@ func runBrief(cmd *cobra.Command, args []string) error {
 
 func init() {
 	briefCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; localhost for a local stack)")
-	briefCmd.Flags().String("project", "", "flmnt project id (default: active workspace)")
+	briefCmd.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 	rootCmd.AddCommand(briefCmd)
 }

@@ -71,6 +71,18 @@ flmnt MCP without you handling tokens by hand. `setup` is idempotent.
 `flmnt workspace use <name|id>` sets the ACTIVE workspace, which is a per-machine convenience
 for ad-hoc commands — it does not decide where a configured repo records.
 
+### Which workspace a command uses
+
+`brief`, `derive`, `gate` and `record-*` resolve the project in this order, first match wins:
+
+1. an explicit `--project <name|id>` on the command
+2. `project_id` in the repo's `.quorum.json` — written by `flmnt setup --project`
+3. the active workspace (`flmnt workspace use`)
+
+Step 3 is the fallback of last resort, not the norm. A repo that reaches it has no identity of its
+own, so a per-machine setting decides where its memory goes — which is why `setup` now refuses to
+configure a repo without naming a workspace.
+
 ## Commands
 
 ```sh

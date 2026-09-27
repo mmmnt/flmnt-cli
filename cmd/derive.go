@@ -246,7 +246,7 @@ func init() {
 	deriveCmd.Flags().String("out", "", "Write candidate JSONL to this path (one SessionDerivation per line)")
 	deriveCmd.Flags().Bool("write", false, "Write derived candidates to flmnt through the router GraphQL (memoryImport)")
 	deriveCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; pass http://localhost:3000 for a local stack)")
-	deriveCmd.Flags().String("project", "", "flmnt project id to write into (default: active workspace)")
+	deriveCmd.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 	deriveCmd.Flags().String("session", "", "Restrict to one main session (id prefix)")
 	deriveCmd.Flags().Bool("writer-dry-run", false, "With --write: print the import payload instead of sending it")
 	deriveCmd.Flags().Bool("hook", false, "Stop-hook mode: read the hook JSON from stdin and derive+import that one session (fails quiet)")

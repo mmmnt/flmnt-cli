@@ -37,7 +37,7 @@ func newRecordClient(cmd *cobra.Command) (record.Client, string, error) {
 
 func recordFlags(c *cobra.Command) {
 	c.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL)")
-	c.Flags().String("project", "", "flmnt project id (default: active workspace)")
+	c.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 }
 
 // parseLabels turns "k=v,k2=v2" into a map.
