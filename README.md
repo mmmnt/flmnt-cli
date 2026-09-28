@@ -92,7 +92,7 @@ flmnt <command> -h               # detailed help for a command
 # Authentication
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
 flmnt logout                     # sign out and revoke local credentials
-flmnt whoami                     # show the active identity and workspace
+flmnt whoami                     # show your identity and which workspace is in force here
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
