@@ -60,7 +60,7 @@ var kitTools = []string{
 	"mcp__flmnt__record_decision", "mcp__flmnt__record_operational_decision",
 	"mcp__flmnt__record_exploration", "mcp__flmnt__record_supersession",
 	"mcp__flmnt__record_attestation", "mcp__flmnt__record_metric", "mcp__flmnt__record_plan",
-	"mcp__flmnt__record_mistake", "mcp__flmnt__create_stream", "mcp__flmnt__hydrate_artifact",
+	"mcp__flmnt__record_mistake", "mcp__flmnt__create_stream",
 }
 
 func Run(cfg Config) error {
@@ -288,4 +288,14 @@ func writeJSON(path string, v any) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+// CommandCount is the number of slash commands the kit installs, read from the catalog itself so a
+// command added or removed never leaves a hand-counted number behind.
+func CommandCount() int {
+	entries, err := assets.ReadDir("assets/commands")
+	if err != nil {
+		return 0
+	}
+	return len(entries)
 }

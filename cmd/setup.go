@@ -58,7 +58,7 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 			fmt.Fprintf(out, "  .mcp.json              → flmnt (direct, OAuth on first /mcp; other servers preserved)\n")
 		}
 		fmt.Fprintf(out, "  hooks (settings.local) → SessionStart·UserPromptSubmit·PreToolUse·PostToolUse·PreCompact·SubagentStop·Stop·SessionEnd\n")
-		fmt.Fprintf(out, "  .claude/commands/      → 13 /flmnt-* slash commands\n")
+		fmt.Fprintf(out, "  .claude/commands/      → %d /flmnt-* slash commands\n", setup.CommandCount())
 		fmt.Fprintf(out, "  .claude/flmnt-hooks/   → nudge + causal-ref-gate scripts\n")
 		fmt.Fprintf(out, "  permissions            → flmnt MCP tools granted\n")
 		return nil

@@ -27,13 +27,18 @@ func TestRunInstallsCommandsHooksAndFullMap(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	// 13 slash commands written.
+	// Every command in the catalog is written — counted FROM the catalog, not from a literal that
+	// goes stale the moment one is added or (as with flmnt-hydrate) removed.
+	catalog, err := assets.ReadDir("assets/commands")
+	if err != nil {
+		t.Fatalf("read catalog: %v", err)
+	}
 	cmds, err := os.ReadDir(filepath.Join(dir, ".claude", "commands"))
 	if err != nil {
 		t.Fatalf("read commands: %v", err)
 	}
-	if len(cmds) != 13 {
-		t.Fatalf("commands = %d, want 13", len(cmds))
+	if len(cmds) != len(catalog) {
+		t.Fatalf("commands = %d, want %d (the catalog's size)", len(cmds), len(catalog))
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".claude", "commands", "flmnt-recall.md")); err != nil {
 		t.Fatalf("flmnt-recall.md missing: %v", err)
@@ -208,5 +213,30 @@ func TestPrecompactHookNeverFabricatesStreamIDs(t *testing.T) {
 	}
 	if !strings.Contains(script, "list_streams") {
 		t.Fatal("precompact hook must direct the model to resolve stream ids via list_streams")
+	}
+}
+
+// The kit granted `mcp__flmnt__hydrate_artifact` and installed a /flmnt-hydrate command that calls
+// it. That tool was deleted from the MCP surface on 2026-07-14 (cdc6883c, "drop hydrate_artifact per
+// the graph-first ingestion decision") along with this very command file — and `flmnt setup` put it
+// back in every repo it touched, because the asset survived here. A catalog entry for a tool the
+// server does not register is a command that can only ever fail.
+func TestTheKitGrantsNoToolTheServerDoesNotHave(t *testing.T) {
+	for _, tool := range kitTools {
+		if strings.Contains(tool, "hydrate_artifact") {
+			t.Errorf("kitTools grants %q, which the MCP server has not registered since 2026-07-14", tool)
+		}
+	}
+}
+
+func TestTheCommandCatalogShipsNoDeadCommand(t *testing.T) {
+	entries, err := assets.ReadDir("assets/commands")
+	if err != nil {
+		t.Fatalf("reading the command catalog: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name() == "flmnt-hydrate.md" {
+			t.Error("the catalog still ships flmnt-hydrate.md, whose only tool call does not exist")
+		}
 	}
 }
