@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 
@@ -90,13 +91,42 @@ func resolveGateCmd() (string, error) {
 // resolveProject picks the flmnt project for derive/brief: the --project flag, else the repo's
 // project_id (written by `flmnt setup --project`), else the active workspace.
 func resolveProject(cmd *cobra.Command, repoDir string) string {
-	if v, _ := cmd.Flags().GetString("project"); v != "" {
-		return v
+	flag, _ := cmd.Flags().GetString("project")
+	pinned := ""
+	if pc, err := setup.LoadProjectConfig(repoDir); err == nil {
+		pinned = pc.ProjectID
 	}
-	if pc, err := setup.LoadProjectConfig(repoDir); err == nil && pc.ProjectID != "" {
-		return pc.ProjectID
+	resolved := resolveProjectWith(flag, pinned, func(arg string) (string, error) {
+		client, cerr := newWorkspaceClient(cmd)
+		if cerr != nil {
+			return "", errNoWorkspaceClient
+		}
+		id, _, rerr := resolveWorkspaceID(client, arg)
+		return id, rerr
+	})
+	if resolved != "" {
+		return resolved
 	}
 	return resolveActiveWorkspace(cmd)
+}
+
+// errNoWorkspaceClient marks resolution as UNAVAILABLE rather than failed — offline, no credentials,
+// an expired token. brief and gate run inside hooks and fail quiet, so the caller's own value is
+// used rather than the command dying on a lookup it never strictly needed.
+var errNoWorkspaceClient = errors.New("workspace client unavailable")
+
+// resolveProjectWith picks the project id from the flag, else the repo's pin. The flag is documented
+// as taking a workspace NAME or id, so it is resolved through byName; a name that cannot be resolved
+// falls back to the raw value, which is what the server then refuses by name rather than silently
+// recording somewhere else.
+func resolveProjectWith(flag, pinned string, byName func(string) (string, error)) string {
+	if flag != "" {
+		if id, err := byName(flag); err == nil && id != "" {
+			return id
+		}
+		return flag
+	}
+	return pinned
 }
 
 func init() {
