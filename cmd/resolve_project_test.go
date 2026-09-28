@@ -1,6 +1,10 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/spf13/cobra"
+)
 
 /*
 The --project flag on brief, derive, gate and every record-* command is documented as taking a
@@ -57,5 +61,23 @@ func TestRepoConfigStillWinsWhenNoFlagIsGiven(t *testing.T) {
 
 	if got := resolveProjectWith("", "repo-pinned-id", byName); got != "repo-pinned-id" {
 		t.Errorf("the repo pin must be used when no flag is given; got %q", got)
+	}
+}
+
+/*
+Every command that RESOLVES a project must accept the flag that overrides it. `gate` called
+
+	resolveProject and never registered --project, so `flmnt gate --project x` died with "unknown
+	flag" — inside a UserPromptSubmit hook, a hard failure — while both READMEs listed gate among the
+	commands where "an explicit --project" is step one of the documented order.
+
+	Swept rather than listed: a command added later that resolves a project is covered without anyone
+	remembering to extend this test, which is the whole failure mode here.
+*/
+func TestEveryProjectResolvingCommandAcceptsTheFlag(t *testing.T) {
+	for _, c := range []*cobra.Command{briefCmd, deriveCmd, gateCmd, recordMetricCmd} {
+		if c.Flags().Lookup("project") == nil {
+			t.Errorf("%s resolves a project but does not register --project", c.Name())
+		}
 	}
 }

@@ -44,5 +44,6 @@ var gateCmd = &cobra.Command{
 
 func init() {
 	gateCmd.Flags().Duration("threshold", 1800*time.Second, "Keyframe age threshold (default 30m)")
+	gateCmd.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 	rootCmd.AddCommand(gateCmd)
 }
