@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
 )
 
@@ -12,10 +13,9 @@ var whoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show the active identity and workspace",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		serverURL, _ := cmd.Flags().GetString("server-url")
-		if serverURL == "" {
-			serverURL = envOr("QUORUM_SERVER_URL", "")
-		}
+		// The same resolution every other command uses, so standing in a configured repo is enough:
+		// whoami used to refuse with the server_url its own .quorum.json was declaring.
+		serverURL := resolveAuthServerURL(cmd)
 		if serverURL == "" {
 			return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
 		}
@@ -46,11 +46,11 @@ var whoamiCmd = &cobra.Command{
 		if identity == "" {
 			identity = claims.Sub
 		}
-		if cfg.ActiveWorkspaceName != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s  (active workspace: %s)\n", identity, cfg.ActiveWorkspaceName)
-		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s  (no active workspace)\n", identity)
+		pinned := ""
+		if pc, perr := setup.LoadProjectConfig(""); perr == nil {
+			pinned = pc.ProjectID
 		}
+		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(identity, cfg.ActiveWorkspaceName, pinned))
 		return nil
 	},
 }
@@ -58,4 +58,17 @@ var whoamiCmd = &cobra.Command{
 func init() {
 	whoamiCmd.Flags().String("server-url", "", "flmnt server URL")
 	rootCmd.AddCommand(whoamiCmd)
+}
+
+// whoamiLine says which workspace is actually in force. A repo that has been set up records into its
+// OWN workspace regardless of the active one, so naming the active workspace there would answer a
+// question nobody asked and hide the one that governs.
+func whoamiLine(identity, activeName, pinned string) string {
+	if pinned != "" {
+		return fmt.Sprintf("%s  (this repo records into: %s)", identity, pinned)
+	}
+	if activeName != "" {
+		return fmt.Sprintf("%s  (active workspace: %s)", identity, activeName)
+	}
+	return fmt.Sprintf("%s  (no active workspace)", identity)
 }
