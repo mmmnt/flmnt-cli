@@ -98,11 +98,11 @@ flmnt whoami                     # show your identity and which workspace is in 
 flmnt workspace list             # list workspaces you own or are a member of
 flmnt workspace create <name>    # create a workspace and make it active
 flmnt workspace use <name|id>    # set the active workspace (sent as X-Workspace-Id)
-flmnt workspace rename <name>    # rename a workspace you own
-flmnt workspace delete <name|id> # delete a workspace you own
-flmnt workspace members          # list members of a workspace
-flmnt workspace add-member       # add a member to a workspace you own
-flmnt workspace remove-member    # remove a member from a workspace you own
+flmnt workspace rename <name|id> <new-name>       # rename a workspace you own
+flmnt workspace delete <name|id> --yes            # delete a workspace you own (refuses without --yes)
+flmnt workspace members <name|id>                 # list members of a workspace
+flmnt workspace add-member <name|id> @username    # add a member to a workspace you own
+flmnt workspace remove-member <name|id> @username # remove a member from a workspace you own
 
 # MCP / Claude Code integration
 flmnt setup --server-url <url> --project <name|id>

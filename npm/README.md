@@ -16,7 +16,8 @@ Prefer a native package manager? The same CLI ships through several channels:
 
 ```sh
 brew install mmmnt/tap/flmnt                 # Homebrew (macOS/Linux)
-scoop install flmnt                          # Scoop (Windows)
+scoop bucket add flmnt https://github.com/mmmnt/scoop-bucket   # Scoop (Windows): add the bucket first
+scoop install flmnt
 go install github.com/mmmnt/flmnt-cli@latest # Go
 ```
 
