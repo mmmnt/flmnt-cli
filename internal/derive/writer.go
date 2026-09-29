@@ -155,7 +155,7 @@ func entryType(k Kind) string {
 	case KindPrompt:
 		// NOT "decision.made". A prompt is what the human said, not a decision anybody recorded —
 		// keeping the two apart is what lets decision.made mean something, and it is what stops a
-		// founder'''s typing from barring every agent in "Who'''s current". The capture itself stays:
+		// founder's typing from barring every agent in "Who's current". The capture itself stays:
 		// replayed in order and attributed, prompts reconstruct the path an actor took to a ruling.
 		return "prompt.captured"
 	}
