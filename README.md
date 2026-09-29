@@ -117,8 +117,9 @@ flmnt sync push                  # sync local Quorum data up to the remote works
 flmnt sync pull                  # sync remote workspace data down to local
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
-flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + mistakes
+flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes
 flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git
+flmnt derive --intent            # how captured prompts classify, and the openers the lexicon missed
 flmnt record-metric --name <n> --value <v>   # write an operational metric to {project}::metrics
 flmnt record-metric --hook       # PostToolUse: emit a CI metric for the command that just ran (stdin)
 flmnt record-plan --content <p>  # write a multi-step plan to {project}::plan

@@ -10,15 +10,15 @@ Package `internal/intent`. Read-time only: the label is computed from stored tex
 into an entry. The log is append-only and burst 3/4 exist because version one of this rule was wrong
 on real sentences; a stamped label would be permanently wrong wherever the rule improves.
 
-## TODO
-- [ ] Burst 1: Sentences splits on terminal punctuation and numbered-list markers, dropping bare markers [depends: none]
-- [ ] Burst 2: a sentence ending in "?" is an inquiry [depends: 1]
-- [ ] Burst 3: an imperative opener beats an interrogative one, so "do it" is a directive [depends: 1]
-- [ ] Burst 4: a subordinate opener without a terminal "?" is an assertion [depends: 2]
-- [ ] Burst 5: anything else is an assertion [depends: 1]
-- [ ] Burst 6: Labels reports the SET of a message's sentence labels [depends: 2,3,4,5]
-- [ ] Burst 7: brief surfaces outstanding directives and inquiries from prompt.captured [depends: 6]
-- [ ] Burst 8: FallThroughOpeners reports the openers the lexicon missed, by frequency [depends: 5]
+## DONE (c7bdc7c, ec00194, 011410b, a2595da, 684de79, 0dc8292, f147581)
+- [x] Burst 1: Sentences splits on terminal punctuation and numbered-list markers, dropping bare markers [depends: none]
+- [x] Burst 2: a sentence ending in "?" is an inquiry [depends: 1]
+- [x] Burst 3: an imperative opener beats an interrogative one, so "do it" is a directive [depends: 1]
+- [x] Burst 4: a subordinate opener without a terminal "?" is an assertion [depends: 2]
+- [x] Burst 5: anything else is an assertion [depends: 1]
+- [x] Burst 6: Labels reports the SET of a message's sentence labels [depends: 2,3,4,5]
+- [x] Burst 7: brief surfaces outstanding directives and inquiries from prompt.captured [depends: 6]
+- [x] Burst 8: FallThroughOpeners reports the openers the lexicon missed, by frequency [depends: 5]
 
 ## Why each burst exists — all four numbers measured on the real 202-prompt corpus
 
@@ -42,3 +42,24 @@ The corpus is the founder's own transcripts and is NOT committed. Burst 8 is how
 checked against real data without the data entering the repo.
 
 ## DONE
+
+## Verified against the real corpus, not a fixture
+
+`flmnt derive --intent` over 205 captured prompts / 470 sentences: directive 132, inquiry 69,
+assertion 269. Both target defects confirmed dead on real sentences — all four `do` sentences classify
+directive ("do it", "do both.", "do it when CI on main passes", "do not work in main"), and all three
+subordinate clauses classify assertion ("when you get ready to push changes to billing, there's no CI
+hooked up", "If they do, you go current immediately", "where is the team/org separation, spacing is
+off").
+
+THE GATE EARNED ITSELF ON ITS FIRST RUN. Of the whole fall-through tail, exactly two openers were
+verbs: `finish` (×2) and bare `let` (×2) — four directions filed as assertions because two words were
+missing, and `let's` was present while `let` was not. Both closed under test. Everything else in the
+tail is pronouns, articles, conjunctions and domain nouns.
+
+`flmnt brief` live against production surfaces the real thing:
+  Their recent directions:  - fix the response on the supersession guard.
+  Their recent questions:   - what do you mean that the RLM hosts a model?
+
+Known and left alone: the brief's "Recent decisions" still shows pre-rename prompt-decisions from
+before v1.10.8. That is the declined retroactivity (ruling cc6a9636), not a defect — they age out.
