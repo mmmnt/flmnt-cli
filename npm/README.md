@@ -82,6 +82,9 @@ flmnt record-metric --name <n> --value <v>   # write an operational metric
 flmnt record-plan --content <p>              # write a multi-step plan
 flmnt record-supersession --content <c> --supersedes <id>  # replace a decision
 
+# Doctrine as markdown (generated — never hand-maintained)
+flmnt corpus --out training                   # render the DOC-NODE documents in the domain stream
+
 # Utilities
 flmnt health                     # check health of Core, Engine, and proxy services
 flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook

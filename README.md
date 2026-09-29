@@ -125,6 +125,10 @@ flmnt record-plan --content <p>  # write a multi-step plan to {project}::plan
 flmnt record-supersession --content <c> --supersedes <id>  # replace a decision (SUPERSEDED_BY edge)
 flmnt record-attestation --kind <k> --note <n>             # ContextAttestation metric
 
+# Doctrine as markdown (generated — never hand-maintained)
+flmnt corpus --out training       # render the workspace's DOC-NODE documents from its domain stream
+flmnt corpus --project platform --out training   # …from another workspace you can reach
+
 # Utilities
 flmnt health                     # check health of Core, Engine, and proxy services
 flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook
