@@ -53,12 +53,14 @@ func NominateSession(repo string, recs []Record) SessionDerivation {
 				Provenance: Provenance{SessionID: sid, Branch: sum.GitBranch, UUIDs: nz(r.UUID), Files: r.EditedFiles()},
 			})
 		default:
-			// User messages are CAPTURED, not judged into decisions. A prompt is what the human said —
-			// the data source a decision is replayed from, which in a regulated setting is the evidence
-			// of how an actor arrived at one. Questions, observations, corrections and injected meta
-			// are filtered out; what survives is direction. Ruled 2026-09-29: filing these as
-			// decision.made inflated every decision count and, until 03b643fa, held every agent behind
-			// in "Who'''s current" — the founder'''s own typing moved a bar nobody could clear.
+			// User messages are CAPTURED, never judged. A prompt is what the human said — the data
+			// source a decision is replayed from, which in a regulated setting is the evidence of how
+			// an actor arrived at one. Only injected meta and slash-commands are dropped, because
+			// neither is the human speaking; nothing here rules on whether what they said mattered.
+			// Ruled cc6a9636: classification is deterministic or it does not happen, and no
+			// deterministic rule for direction-versus-inquiry has been settled. A title that guessed
+			// was worse than none — "Direction-setting message" was stamped on 16 of 72 real captures
+			// that contained a question mark.
 			txt := r.UserText()
 			// Nothing said is nothing to capture. The byte floor was doing this job by accident: an
 			// assistant turn and a tool result both reach here carrying no user text, and only the
@@ -70,10 +72,7 @@ func NominateSession(repo string, recs []Record) SessionDerivation {
 				d.Candidates = append(d.Candidates, userCandidate(sid, sum.GitBranch, r, KindMistake, "User correction", txt))
 				continue
 			}
-			if !isDirective(txt) {
-				continue // a question or observation — not direction
-			}
-			d.Candidates = append(d.Candidates, userCandidate(sid, sum.GitBranch, r, KindPrompt, "Direction-setting message", txt))
+			d.Candidates = append(d.Candidates, userCandidate(sid, sum.GitBranch, r, KindPrompt, "User message", txt))
 		}
 	}
 	return d
@@ -125,24 +124,6 @@ func isCorrection(s string) bool {
 		}
 	}
 	return false
-}
-
-// questionStarts begin an inquiry, not a direction.
-var questionStarts = []string{"why ", "what ", "how ", "when ", "who ", "where ", "does ", "do ",
-	"can ", "could ", "should ", "is ", "are ", "will ", "would ", "did "}
-
-// isDirective is true for substantive non-question messages (a direction, not an inquiry).
-func isDirective(s string) bool {
-	t := strings.ToLower(strings.TrimSpace(s))
-	if strings.HasSuffix(t, "?") {
-		return false
-	}
-	for _, q := range questionStarts {
-		if strings.HasPrefix(t, q) {
-			return false
-		}
-	}
-	return true
 }
 
 func userCandidate(sid, branch string, r Record, kind Kind, title, txt string) Candidate {

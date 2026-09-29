@@ -48,3 +48,25 @@ func TestAShortDirectionIsCaptured(t *testing.T) {
 		t.Errorf("prompts=%d want 1; a direction is not measured in bytes", got)
 	}
 }
+
+/*
+isDirective returned TRUE by default and only refused a message ending in "?" or opening with one of
+sixteen question words. Measured over 72 real captures, 16 contained a "?" and were still titled
+"Direction-setting message" — including "what's the login url? ... give me the path and I'll test",
+which the opening-word list misses because of the apostrophe. A title is a claim, and that one was
+being made on a coin flip. The record now says what it knows: a user said this.
+*/
+func TestAQuestionIsCapturedAndNotCalledADirection(t *testing.T) {
+	recs := []Record{{Type: "user", UUID: "u1", SessionID: "s1", Message: userMsg("what's the login url?")}}
+
+	d := NominateSession("/repo", recs)
+
+	if got := d.Counts()[KindPrompt]; got != 1 {
+		t.Fatalf("prompts=%d want 1; a question is still something the human said", got)
+	}
+	for _, c := range d.Candidates {
+		if c.Kind == KindPrompt && c.Title != "User message" {
+			t.Errorf("title=%q; a captured prompt must not claim to be direction-setting", c.Title)
+		}
+	}
+}
