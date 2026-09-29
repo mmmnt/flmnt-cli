@@ -262,3 +262,25 @@ func TestSetupWritesTheWorkspaceNameBesideItsID(t *testing.T) {
 		t.Errorf("want the name persisted so whoami can say it; got %q", pc.ProjectName)
 	}
 }
+
+/*
+The doctrine corpus lives in a DIFFERENT workspace from the one the repo records into — quorum
+
+	records into bc674142 while the methodology is in d6dd5b65 — so the SessionStart refresh cannot
+	reuse ProjectID. Setup has to be told, and records it so the hook can name it.
+*/
+func TestSetupRecordsWhichWorkspaceHoldsTheCorpus(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := Run(Config{ServerURL: "https://x/mcp", ProjectID: "p", CorpusProject: "d6dd5b65", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc.CorpusProject != "d6dd5b65" {
+		t.Errorf("want the corpus workspace recorded; got %q", pc.CorpusProject)
+	}
+}

@@ -12,12 +12,15 @@ type Config struct {
 	ServerURL   string
 	ProjectID   string // per-repo flmnt project written to the repo config (optional)
 	ProjectName string // the workspace's human name, so a reader is never shown a bare UUID
-	ProxyPort   int
-	GateCmd     string // UserPromptSubmit: context-recency nudge (default: "flmnt gate")
-	BriefCmd    string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
-	DeriveCmd   string // Stop: derive + import the finished session (default: "flmnt derive --hook")
-	Dir         string // project root; defaults to cwd
-	Proxy       bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
+	// CorpusProject is the workspace holding the doctrine corpus, which is NOT the workspace this repo
+	// records into. Empty means this repo has no corpus and no SessionStart refresh is wired.
+	CorpusProject string
+	ProxyPort     int
+	GateCmd       string // UserPromptSubmit: context-recency nudge (default: "flmnt gate")
+	BriefCmd      string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
+	DeriveCmd     string // Stop: derive + import the finished session (default: "flmnt derive --hook")
+	Dir           string // project root; defaults to cwd
+	Proxy         bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
 }
 
 type ProjectConfig struct {
@@ -27,6 +30,9 @@ type ProjectConfig struct {
 	// exists so nothing has to show a bare UUID. Absent in a repo set up before it existed, which is
 	// why every reader falls back to the id rather than treating "" as the name.
 	ProjectName string `json:"project_name,omitempty"`
+	// CorpusProject is the workspace whose DOC-NODE documents `flmnt corpus` renders into this repo.
+	// Separate from ProjectID because doctrine and a project's own memory are different workspaces.
+	CorpusProject string `json:"corpus_project,omitempty"`
 }
 
 // The two .mcp.json server entries `setup` can manage:
@@ -98,7 +104,7 @@ func Run(cfg Config) error {
 
 func writeProjectConfig(dir string, cfg Config) error {
 	path := filepath.Join(dir, ".quorum.json")
-	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName})
+	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName, CorpusProject: cfg.CorpusProject})
 }
 
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {
