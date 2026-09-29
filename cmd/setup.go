@@ -35,15 +35,27 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 			return err
 		}
 
+		// The doctrine corpus is a DIFFERENT workspace from the one this repo records into, so it gets
+		// its own flag and its own resolution. Given, it wires the SessionStart refresh; omitted, this
+		// repo has no corpus and gains no refresh.
+		corpusProject := ""
+		if arg, _ := cmd.Flags().GetString("corpus-project"); arg != "" {
+			corpusProject, _, err = resolveSetupProject(cmd, arg)
+			if err != nil {
+				return err
+			}
+		}
+
 		cfg := setup.Config{
-			ServerURL:   serverURL,
-			ProjectID:   projectID,
-			ProjectName: projectName,
-			ProxyPort:   proxyPort,
-			Proxy:       proxy,
-			GateCmd:     flmntCmd + " gate",
-			BriefCmd:    flmntCmd + " brief",
-			DeriveCmd:   flmntCmd + " derive --hook",
+			ServerURL:     serverURL,
+			ProjectID:     projectID,
+			ProjectName:   projectName,
+			CorpusProject: corpusProject,
+			ProxyPort:     proxyPort,
+			Proxy:         proxy,
+			GateCmd:       flmntCmd + " gate",
+			BriefCmd:      flmntCmd + " brief",
+			DeriveCmd:     flmntCmd + " derive --hook",
 		}
 
 		if err := setup.Run(cfg); err != nil {
@@ -133,6 +145,7 @@ func resolveProjectWith(flag, pinned string, byName func(string) (string, error)
 func init() {
 	setupCmd.Flags().String("server-url", "", "flmnt server URL (required)")
 	setupCmd.Flags().String("project", "", "workspace name or id this repo records into (used by brief, derive, gate and record) (required)")
+	setupCmd.Flags().String("corpus-project", "", "workspace name or id holding a doctrine corpus; given, SessionStart refreshes `flmnt corpus` from it")
 	setupCmd.Flags().Bool("proxy", false, "wire the local-proxy entry (run `flmnt proxy`) instead of the direct OAuth entry — for CI / non-OAuth clients")
 	setupCmd.Flags().Int("proxy-port", 9876, "Local proxy port (used with --proxy)")
 	_ = setupCmd.MarkFlagRequired("server-url")

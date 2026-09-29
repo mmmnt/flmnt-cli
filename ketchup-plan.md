@@ -11,11 +11,19 @@ the files were derived but only when somebody remembered to derive them.
 - The hook must fail QUIET like `brief` and `gate` — offline, not logged in, or a workspace with no
   DOC-NODE must leave the files alone and say nothing, never break a session start.
 
-## TODO
-- [ ] Burst 1: the generated header records the newest entry the render came from [depends: none]
-- [ ] Burst 2: `flmnt corpus --hook` fails quiet and writes nothing when it cannot render [depends: none]
-- [ ] Burst 3: `flmnt setup --corpus-project` records which workspace holds the corpus [depends: none]
-- [ ] Burst 4: setup wires the SessionStart refresh only when a corpus workspace is recorded [depends: 2, 3]
+## DONE
+- [x] Burst 1: the generated header records the newest entry the render came from
+- [x] Burst 2: `flmnt corpus --hook` fails quiet and writes nothing when it cannot render
+- [x] Burst 3: `flmnt setup --corpus-project` records which workspace holds the corpus
+- [x] Burst 4: setup wires the SessionStart refresh only when a corpus workspace is recorded
+- [x] `--corpus-project` registered on setup and resolved by NAME
+
+VERIFIED END TO END in a throwaway repo, not by flag-shape assertion:
+`setup --project quorum --corpus-project platform` resolved both names, wrote
+`corpus_project: d6dd5b65-…` beside `project_id: bc674142-…`, and wired
+`flmnt corpus --hook --project d6dd5b65-…` as the third SessionStart hook. Running that hook
+rendered five documents silently (exit 0); pointing it at a workspace with no DOC-NODE exited 0 and
+wrote nothing. Header now reads: "Rendered from 187 entries; newest `fac52696-…` at 2026-09-28T23:23:18.961Z."
 
 ## Not building, and why
 A separate drift detector that compares the file's stamp against the live stream. With the hook

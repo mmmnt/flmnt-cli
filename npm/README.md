@@ -84,6 +84,7 @@ flmnt record-supersession --content <c> --supersedes <id>  # replace a decision
 
 # Doctrine as markdown (generated — never hand-maintained)
 flmnt corpus --out training                   # render the DOC-NODE documents in the domain stream
+flmnt corpus --hook --project platform        # SessionStart refresh; wired by setup --corpus-project
 
 # Utilities
 flmnt health                     # check health of Core, Engine, and proxy services

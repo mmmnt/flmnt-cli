@@ -128,6 +128,7 @@ flmnt record-attestation --kind <k> --note <n>             # ContextAttestation 
 # Doctrine as markdown (generated — never hand-maintained)
 flmnt corpus --out training       # render the workspace's DOC-NODE documents from its domain stream
 flmnt corpus --project platform --out training   # …from another workspace you can reach
+flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start
 
 # Utilities
 flmnt health                     # check health of Core, Engine, and proxy services
