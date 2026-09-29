@@ -173,3 +173,16 @@ func TestEntriesThatAreNotDoctrineRenderNowhereAndAreCounted(t *testing.T) {
 		}
 	}
 }
+
+func TestADocumentRecordsHowManySectionsItRendered(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "a", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1a · ONE. one."},
+		{ID: "b", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1b · TWO. two."},
+		{ID: "c", CausationID: "b", EntryType: "decision.superseded", Content: "METHODOLOGY §1b · TWO, REVISED. still two."},
+	})
+
+	if r.Files[0].Sections != 2 {
+		t.Errorf("want 2 sections (a superseder replaces a section, it does not add one), got %d", r.Files[0].Sections)
+	}
+}

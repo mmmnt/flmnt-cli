@@ -23,6 +23,7 @@ type File struct {
 	Name     string
 	Title    string
 	Markdown string
+	Sections int
 }
 
 // Report is everything a render produced. Unrendered counts, by entry type, what the stream held and
@@ -98,6 +99,7 @@ func Render(streamID string, entries []Entry) Report {
 			}
 		}
 		bodies[owner].WriteString(section(current(e, byID, replacedBy)))
+		r.Files[fileOf[owner]].Sections++
 		for at := e; replacedBy[at.ID] != ""; at = byID[replacedBy[at.ID]] {
 			replaced[owner].WriteString(retired(at, replacedBy[at.ID]))
 		}
