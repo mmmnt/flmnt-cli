@@ -155,3 +155,21 @@ func TestADoctrineDecisionThatReachesNoDocNodeStillRenders(t *testing.T) {
 		t.Errorf("unassigned ruling missing:\n%s", r.Files[1].Markdown)
 	}
 }
+
+func TestEntriesThatAreNotDoctrineRenderNowhereAndAreCounted(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "kf", CausationID: "doc-1", EntryType: "keyframe.written", Content: "NAVIGATION. index of every entry id."},
+		{ID: "ex", CausationID: "doc-1", EntryType: "exploration.committed", Content: "SEEDING PROBE. verifying the write path."},
+	})
+
+	if strings.Contains(r.Files[0].Markdown, "NAVIGATION") || strings.Contains(r.Files[0].Markdown, "SEEDING PROBE") {
+		t.Errorf("a keyframe or exploration was rendered as doctrine:\n%s", r.Files[0].Markdown)
+	}
+	want := map[string]int{"keyframe.written": 1, "exploration.committed": 1}
+	for kind, n := range want {
+		if r.Unrendered[kind] != n {
+			t.Errorf("want %d %s counted, got %d", n, kind, r.Unrendered[kind])
+		}
+	}
+}

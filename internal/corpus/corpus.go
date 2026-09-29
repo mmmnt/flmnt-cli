@@ -25,9 +25,12 @@ type File struct {
 	Markdown string
 }
 
-// Report is everything a render produced.
+// Report is everything a render produced. Unrendered counts, by entry type, what the stream held and
+// the documents do not — keyframes, explorations, plan snapshots. Reporting it keeps the omission
+// visible: a renderer that silently drops entry types is how a corpus goes stale unnoticed.
 type Report struct {
-	Files []File
+	Files      []File
+	Unrendered map[string]int
 }
 
 const (
@@ -58,7 +61,7 @@ func Render(streamID string, entries []Entry) Report {
 		}
 	}
 
-	var r Report
+	r := Report{Unrendered: map[string]int{}}
 	fileOf := make(map[string]int)
 	bodies := make(map[string]*strings.Builder)
 	replaced := make(map[string]*strings.Builder)
@@ -75,7 +78,13 @@ func Render(streamID string, entries []Entry) Report {
 	}
 
 	for _, e := range entries {
-		if docs[e.ID] || e.EntryType != decisionType {
+		if docs[e.ID] {
+			continue
+		}
+		if e.EntryType != decisionType {
+			if e.EntryType != supersededType {
+				r.Unrendered[e.EntryType]++
+			}
 			continue
 		}
 		owner := ownerDoc(e, byID, docs)
