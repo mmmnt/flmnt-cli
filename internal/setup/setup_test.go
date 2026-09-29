@@ -284,3 +284,32 @@ func TestSetupRecordsWhichWorkspaceHoldsTheCorpus(t *testing.T) {
 		t.Errorf("want the corpus workspace recorded; got %q", pc.CorpusProject)
 	}
 }
+
+/*
+The refresh is wired ONLY when this repo has a corpus. A repo without one must not gain a
+
+	SessionStart command that renders nothing — an always-failing hook, even a quiet one, is a
+	round-trip on every session start for no result.
+*/
+func TestSetupWiresTheCorpusRefreshOnlyWhenThereIsACorpus(t *testing.T) {
+	sessionStart := func(cfg Config) string {
+		hooks := buildHooks(cfg)
+		var all string
+		for _, m := range hooks["SessionStart"] {
+			for _, h := range m.Hooks {
+				all += h.Command + "\n"
+			}
+		}
+		return all
+	}
+
+	withCorpus := sessionStart(Config{CorpusProject: "d6dd5b65"})
+	if !strings.Contains(withCorpus, "flmnt corpus --hook --project d6dd5b65") {
+		t.Errorf("a repo with a corpus must refresh it on SessionStart; got\n%s", withCorpus)
+	}
+
+	without := sessionStart(Config{})
+	if strings.Contains(without, "corpus") {
+		t.Errorf("a repo with no corpus must not gain a refresh that can only render nothing; got\n%s", without)
+	}
+}

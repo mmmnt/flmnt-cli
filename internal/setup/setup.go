@@ -228,8 +228,14 @@ func buildHooks(cfg Config) map[string][]hookMatcher {
 		return hookEntry{Type: "command", Command: fmt.Sprintf("\"$CLAUDE_PROJECT_DIR/%s/%s\"", hookScriptsRel, name)}
 	}
 	cmd := func(c string) hookEntry { return hookEntry{Type: "command", Command: c} }
+	// The corpus refresh is wired only for a repo that HAS a corpus. Wiring it everywhere would add a
+	// round-trip to every session start that can only ever render nothing.
+	sessionStart := []hookEntry{cmd(brief), cmd("flmnt health || true")}
+	if cfg.CorpusProject != "" {
+		sessionStart = append(sessionStart, cmd("flmnt corpus --hook --project "+cfg.CorpusProject))
+	}
 	return map[string][]hookMatcher{
-		"SessionStart": {{Matcher: "", Hooks: []hookEntry{cmd(brief), cmd("flmnt health || true")}}},
+		"SessionStart": {{Matcher: "", Hooks: sessionStart}},
 		"UserPromptSubmit": {{Matcher: "", Hooks: []hookEntry{
 			cmd(gate),
 			script("mistake-capture-reminder.sh"),
