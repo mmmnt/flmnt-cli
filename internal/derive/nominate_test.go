@@ -42,8 +42,8 @@ func TestNominateSession(t *testing.T) {
 	if c[KindCommit] != 1 {
 		t.Errorf("commit=%d want 1", c[KindCommit])
 	}
-	if c[KindDecision] != 1 {
-		t.Errorf("decision=%d want 1 (one long non-meta direction message; short + meta excluded)", c[KindDecision])
+	if c[KindPrompt] != 1 {
+		t.Errorf("prompts=%d want 1 (one long non-meta direction message; short + meta excluded)", c[KindPrompt])
 	}
 	if c[KindMistake] != 2 {
 		t.Errorf("mistake=%d want 2 (tool error + user correction)", c[KindMistake])

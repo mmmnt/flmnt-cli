@@ -8,9 +8,9 @@ func TestRefineDropsNoiseAndDups(t *testing.T) {
 		Branch:    "main",
 		Candidates: []Candidate{
 			{Kind: KindKeyframe, LocalID: "s:keyframe"},
-			{Kind: KindDecision, LocalID: "d1", Text: "[Image #7] paste the verification code into the box"},       // noise
-			{Kind: KindDecision, LocalID: "d2", Text: "Use the new token store and set SameSite=strict cookies."},  // keep
-			{Kind: KindDecision, LocalID: "d3", Text: "use the NEW token store  and set samesite=strict cookies."}, // dup of d2 (normalized)
+			{Kind: KindPrompt, LocalID: "d1", Text: "[Image #7] paste the verification code into the box"},       // noise
+			{Kind: KindPrompt, LocalID: "d2", Text: "Use the new token store and set SameSite=strict cookies."},  // keep
+			{Kind: KindPrompt, LocalID: "d3", Text: "use the NEW token store  and set samesite=strict cookies."}, // dup of d2 (normalized)
 			{Kind: KindCommit, LocalID: "c1", Provenance: Provenance{CommitSHAs: []string{"abc"}}},
 			{Kind: KindCommit, LocalID: "c2", Provenance: Provenance{CommitSHAs: []string{"abc"}}}, // dup sha
 			{Kind: KindCommit, LocalID: "p1", Provenance: Provenance{PRURL: "https://x/pr/1"}},
@@ -20,8 +20,8 @@ func TestRefineDropsNoiseAndDups(t *testing.T) {
 	Refine(&d)
 	c := d.Counts()
 
-	if c[KindDecision] != 1 {
-		t.Errorf("decisions=%d want 1 (noise dropped, dup collapsed)", c[KindDecision])
+	if c[KindPrompt] != 1 {
+		t.Errorf("prompts=%d want 1 (noise dropped, dup collapsed)", c[KindPrompt])
 	}
 	if c[KindCommit] != 2 {
 		t.Errorf("commits=%d want 2 (sha dup + PR dup collapsed)", c[KindCommit])

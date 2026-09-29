@@ -16,7 +16,7 @@ import (
 var deriveCmd = &cobra.Command{
 	Use:   "derive",
 	Short: "Derive structured reasoning memory from Claude Code history + git",
-	Long: "Reads local Claude Code session transcripts + git history and derives decisions,\n" +
+	Long: "Reads local Claude Code session transcripts + git history and derives prompts,\n" +
 		"mistakes, and keyframes into flmnt — closing the continuity loop so each session builds\n" +
 		"on the last. Default: a read-only inventory. --write imports; --hook is the Stop-hook entry.",
 	RunE: runDerive,
@@ -72,8 +72,8 @@ func runDerive(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "SESSION\tKEYFRAME\tDECISIONS\tMISTAKES\tCOMMITS\tSUBA\tBRANCH")
-	var tKf, tDec, tMis, tCom, tSub int
+	fmt.Fprintln(w, "SESSION\tKEYFRAME\tPROMPTS\tMISTAKES\tCOMMITS\tSUBA\tBRANCH")
+	var tKf, tPrm, tMis, tCom, tSub int
 	for _, s := range sessions {
 		recs, perr := derive.ParseSession(s)
 		if perr != nil {
@@ -87,9 +87,9 @@ func runDerive(cmd *cobra.Command, args []string) error {
 			id = id[:8]
 		}
 		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%s\n",
-			id, c[derive.KindKeyframe], c[derive.KindDecision], c[derive.KindMistake], c[derive.KindCommit], subs, der.Branch)
+			id, c[derive.KindKeyframe], c[derive.KindPrompt], c[derive.KindMistake], c[derive.KindCommit], subs, der.Branch)
 		tKf += c[derive.KindKeyframe]
-		tDec += c[derive.KindDecision]
+		tPrm += c[derive.KindPrompt]
 		tMis += c[derive.KindMistake]
 		tCom += c[derive.KindCommit]
 		tSub += subs
@@ -101,8 +101,8 @@ func runDerive(cmd *cobra.Command, args []string) error {
 		}
 	}
 	w.Flush()
-	fmt.Fprintf(out, "\nCandidates: %d keyframes · %d decisions · %d mistakes · %d commits  (%d main sessions, +%d subagents)\n",
-		tKf, tDec, tMis, tCom, len(sessions), tSub)
+	fmt.Fprintf(out, "\nCandidates: %d keyframes · %d prompts · %d mistakes · %d commits  (%d main sessions, +%d subagents)\n",
+		tKf, tPrm, tMis, tCom, len(sessions), tSub)
 	if jsonl != nil {
 		fmt.Fprintf(out, "Wrote candidate JSONL → %s\n", outPath)
 	}

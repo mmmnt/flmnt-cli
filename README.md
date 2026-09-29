@@ -118,7 +118,7 @@ flmnt sync pull                  # sync remote workspace data down to local
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + mistakes
-flmnt derive --hook              # Stop: derive decisions/keyframes/mistakes from transcript + git
+flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git
 flmnt record-metric --name <n> --value <v>   # write an operational metric to {project}::metrics
 flmnt record-metric --hook       # PostToolUse: emit a CI metric for the command that just ran (stdin)
 flmnt record-plan --content <p>  # write a multi-step plan to {project}::plan

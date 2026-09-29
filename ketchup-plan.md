@@ -20,7 +20,26 @@ memory subgraph's SDL (`docker/supergraph.production.yaml` reads
 fail on an unknown field — and `--hook` swallows write errors, so it would fail SILENTLY.
 Probe production for the mutation before tagging.
 
-## STILL OPEN (not this change)
-- A captured prompt is recorded as `decision.made`, which it is not. Ruled, planned, not built.
-- `internal/derive/nominate.go` comments promise a "Phase-2 LLM pass" that does not exist; the founder
-  reads that vocabulary as crossover from the benchmark. Discussion parked as `8d333082`.
+## DONE
+- [x] a captured prompt is written as `prompt.captured`, not `decision.made`
+
+`KindDecision` is now `KindPrompt`, and it has exactly one producer — the user-message branch of
+nomination. Derive no longer writes `decision.made` at all. The capture stays: replayed in order and
+attributed, prompts reconstruct the path an actor took to a ruling, which in a regulated market is
+the evidence. What it stops doing is claiming a founder's typing was a decision somebody recorded —
+which inflated every decision count the product shows and moved a bar in "Who's current" that its
+own author could not clear.
+
+Read-side checked before the retype, not after: retrieval does not filter by entry type (the RLM
+special-cases only `decision.mistake`), entry types are not validated on write, and the unknown-type
+fallbacks are graceful (`threadKind` → `question`, `kindOf` → the type verbatim). `Correlate` is
+Kind-agnostic, so replay linkage survives unchanged. The 14 non-test `decision.made` consumers in
+quorum keep working; they simply stop counting prompts.
+
+- [x] the "Phase-2 LLM pass" comments are gone
+
+There is no Phase-2 pass. `DeriveSession` runs nomination straight into Refine, Correlate and the
+writer, so every threshold in `nominate.go` IS the shipped precision, not a pre-filter for a judge
+that would catch the rest. The comments said otherwise in four places and were the standing licence
+for over-collection. The founder reads that vocabulary as crossover from the benchmark, where all
+judging actually lives. Discussion `8d333082`.

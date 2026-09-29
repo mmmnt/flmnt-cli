@@ -5,7 +5,7 @@ type Kind string
 
 const (
 	KindKeyframe Kind = "keyframe"
-	KindDecision Kind = "decision"
+	KindPrompt   Kind = "prompt"
 	KindMistake  Kind = "mistake"
 	KindCommit   Kind = "commit"
 )
@@ -20,11 +20,11 @@ type Provenance struct {
 	PRURL      string   `json:"pr_url,omitempty"`
 }
 
-// Candidate is one nominated unit of reasoning memory — pre-LLM-judgment, pre-write.
+// Candidate is one nominated unit of reasoning memory — nominated, not yet written.
 type Candidate struct {
 	Kind       Kind       `json:"kind"`
 	LocalID    string     `json:"local_id"`       // stable within a run; basis for causal_refs
-	Title      string     `json:"title"`          // rule-derived; the LLM refines in Phase 2
+	Title      string     `json:"title"`          // rule-derived
 	Text       string     `json:"text,omitempty"` // raw source text (user msg / commit body)
 	Timestamp  string     `json:"timestamp,omitempty"`
 	CausalRefs []string   `json:"causal_refs,omitempty"` // local_ids of predecessors (filled in correlate)

@@ -13,7 +13,7 @@ import (
 
 // TestWriteSessionRunsMemoryDeriveAuthenticated verifies the writer's contract: it runs the
 // memoryDerive mutation through the router with a bearer token, scopes to the workspace via projectId,
-// and routes decisions→domain, mistakes→mistake with events carried as a JSON string.
+// and routes prompts→domain, mistakes→mistake with events carried as a JSON string.
 func TestWriteSessionRunsMemoryDeriveAuthenticated(t *testing.T) {
 	var gotAuth, gotQuery string
 	var vars map[string]any
@@ -36,7 +36,7 @@ func TestWriteSessionRunsMemoryDeriveAuthenticated(t *testing.T) {
 		SessionID: "s1",
 		WindowTo:  "2026-06-20T00:00:00Z",
 		Candidates: []Candidate{
-			{Kind: KindDecision, LocalID: "d1", Title: "Decision", Text: "Use the router read op."},
+			{Kind: KindPrompt, LocalID: "d1", Title: "Direction-setting message", Text: "Use the router read op."},
 			{Kind: KindMistake, LocalID: "m1", Title: "Mistake", Text: "Pointed at the wrong workspace."},
 		},
 	}
@@ -93,7 +93,7 @@ func TestWriteSessionOmitsAuthForLocalStack(t *testing.T) {
 
 	w := &Writer{GQL: apiclient.New(srv.URL, "")} // no token
 	if _, err := w.WriteSession(SessionDerivation{
-		Candidates: []Candidate{{Kind: KindDecision, LocalID: "d1", Text: "x"}},
+		Candidates: []Candidate{{Kind: KindPrompt, LocalID: "d1", Text: "x"}},
 	}); err != nil {
 		t.Fatalf("WriteSession: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestWriteSessionDryRunLogsWithoutWriting(t *testing.T) {
 	defer srv.Close()
 	var logged string
 	w := &Writer{GQL: apiclient.New(srv.URL, "tok"), ProjectID: "ws-1", DryRun: true, Log: func(s string) { logged = s }}
-	res, err := w.WriteSession(SessionDerivation{Candidates: []Candidate{{Kind: KindDecision, LocalID: "d1", Text: "x"}}})
+	res, err := w.WriteSession(SessionDerivation{Candidates: []Candidate{{Kind: KindPrompt, LocalID: "d1", Text: "x"}}})
 	if err != nil {
 		t.Fatalf("WriteSession: %v", err)
 	}

@@ -8,7 +8,7 @@ func TestCorrelateChain(t *testing.T) {
 	b := "Also make sure the logout flow clears every cookie and revokes the refresh token server " +
 		"side, because right now stale sessions linger far too long after sign out."
 
-	// Causal chain: u1 (decision) -> assistant x1 -> u2 (decision).
+	// Causal chain: u1 (prompt) -> assistant x1 -> u2 (prompt).
 	recs := []Record{
 		{Type: "user", UUID: "u1", SessionID: "s", Message: userMsg(a)},
 		{Type: "assistant", UUID: "x1", ParentUUID: "u1", SessionID: "s"},
@@ -32,7 +32,7 @@ func TestCorrelateChain(t *testing.T) {
 
 	c1, c2 := byUUID["u1"], byUUID["u2"]
 	if c1.LocalID == "" || c2.LocalID == "" {
-		t.Fatalf("missing decision candidates (u1=%q u2=%q)", c1.LocalID, c2.LocalID)
+		t.Fatalf("missing prompt candidates (u1=%q u2=%q)", c1.LocalID, c2.LocalID)
 	}
 	if len(c1.CausalRefs) != 1 || c1.CausalRefs[0] != keyframe {
 		t.Errorf("u1 should ref the keyframe %q, got %v", keyframe, c1.CausalRefs)

@@ -64,7 +64,7 @@ func deterministicID(seed string) string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", h[0:8], h[8:12], h[12:16], h[16:20], h[20:32])
 }
 
-// WriteSession imports the derivation's candidates: decisions/commits/keyframe → the domain stream,
+// WriteSession imports the derivation's candidates: prompts/commits/keyframe → the domain stream,
 // mistakes → the mistake stream. Returns appended/skipped (skipped = already present = idempotent).
 func (w *Writer) WriteSession(d SessionDerivation) (WriteResult, error) {
 	res := WriteResult{ByKind: map[Kind]int{}}
@@ -152,9 +152,16 @@ func entryType(k Kind) string {
 		return "decision.mistake"
 	case KindCommit:
 		return "commit.recorded"
-	default:
-		return "decision.made"
+	case KindPrompt:
+		// NOT "decision.made". A prompt is what the human said, not a decision anybody recorded —
+		// keeping the two apart is what lets decision.made mean something, and it is what stops a
+		// founder'''s typing from barring every agent in "Who'''s current". The capture itself stays:
+		// replayed in order and attributed, prompts reconstruct the path an actor took to a ruling.
+		return "prompt.captured"
 	}
+	// Every Kind nomination produces is named above. A new one reaching here names itself rather
+	// than borrowing a meaning it has not earned.
+	return string(k)
 }
 
 // postImport runs memoryDerive, serializing each stream's events into the JSON string the mutation
