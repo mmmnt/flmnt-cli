@@ -1,45 +1,44 @@
-# ketchup-plan — derive's writes carry their author
+# ketchup-plan — deterministic intent classification over captured prompts
 
-Part of the "Who's current" work (quorum plan `cada32c2`, ruling `ad840995`).
+Design: flmnt plan `a244bf6d`. Rulings `cc6a9636` (deterministic or it does not happen) and
+`ae838cfa` (design it now; ack list dropped).
+
+Consumer: `flmnt brief`. Nothing read a prompt label before this, and CLAUDE.md forbids a mechanism
+nothing can invoke — so the consumer lands in the same plan, not "later".
+
+Package `internal/intent`. Read-time only: the label is computed from stored text and never written
+into an entry. The log is append-only and burst 3/4 exist because version one of this rule was wrong
+on real sentences; a stamped label would be permanently wrong wherever the rule improves.
+
+## TODO
+- [ ] Burst 1: Sentences splits on terminal punctuation and numbered-list markers, dropping bare markers [depends: none]
+- [ ] Burst 2: a sentence ending in "?" is an inquiry [depends: 1]
+- [ ] Burst 3: an imperative opener beats an interrogative one, so "do it" is a directive [depends: 1]
+- [ ] Burst 4: a subordinate opener without a terminal "?" is an assertion [depends: 2]
+- [ ] Burst 5: anything else is an assertion [depends: 1]
+- [ ] Burst 6: Labels reports the SET of a message's sentence labels [depends: 2,3,4,5]
+- [ ] Burst 7: brief surfaces outstanding directives and inquiries from prompt.captured [depends: 6]
+- [ ] Burst 8: FallThroughOpeners reports the openers the lexicon missed, by frequency [depends: 5]
+
+## Why each burst exists — all four numbers measured on the real 202-prompt corpus
+
+- 41% of messages (82/202) carry MORE than one intent, so burst 6 returns a SET. A single label is
+  wrong two times in five however good the rule is.
+- Per sentence: assertion 283 (59%), directive 119 (25%), inquiry 78 (16%). Assertion is the biggest
+  class and is absent from the directive-vs-discovery framing entirely.
+- Burst 3 exists because `do` is both interrogative and imperative. Four corpus sentences are decided
+  by ordering alone and ALL FOUR are directives — `do it`, `do both.`, `do it when CI on main passes`,
+  `do not work in main`. `do it` is how this work was authorised; interrogative-first calls it a
+  question.
+- Burst 4 exists because 13 of 78 inquiries are subordinate clauses, not questions: "when you get
+  ready to push changes to billing, there's no CI hooked up".
+- Burst 1 drops bare markers because the numbered-list split promotes 20 of them ("2.", "3.") to
+  sentences.
+- Burst 8 exists because the imperative lexicon already leaked: "validate nothing is left over for
+  staging in AWS" was missed because `validate` was not in the list. An enumerated list that cannot
+  report its own gaps is the "gates sweep, never enumerate" failure mode; one that can is not.
+
+The corpus is the founder's own transcripts and is NOT committed. Burst 8 is how the lexicon is
+checked against real data without the data entering the repo.
 
 ## DONE
-- [x] `internal/derive/writer.go` posts `memoryDerive` instead of `memoryImport`
-
-Derive AUTHORS the entries it writes, but it posted them through `memoryImport` — the replication
-mutation, which deliberately attributes nobody so that moving someone else's history cannot acquire an
-author from whoever ran the move. The consequence was that every derived decision landed authorless,
-and an authorless decision used to hold every agent behind in the dashboard's "Who's current".
-
-Verified by re-introduction: pointing the writer back at `memoryImport` fails the test by name.
-Full gate green — 13 packages, `go vet` clean, `gofmt` clean.
-
-## BLOCKED ON A RELEASE ORDER — do not tag until quorum v1.10.12 is LIVE
-`memoryDerive` only becomes reachable once the dashboard deploy recomposes `router.json` from the
-memory subgraph's SDL (`docker/supergraph.production.yaml` reads
-`packages/core/src/graphql/schema.graphql`). Releasing this CLI first would make every `flmnt derive`
-fail on an unknown field — and `--hook` swallows write errors, so it would fail SILENTLY.
-Probe production for the mutation before tagging.
-
-## DONE
-- [x] a captured prompt is written as `prompt.captured`, not `decision.made`
-
-`KindDecision` is now `KindPrompt`, and it has exactly one producer — the user-message branch of
-nomination. Derive no longer writes `decision.made` at all. The capture stays: replayed in order and
-attributed, prompts reconstruct the path an actor took to a ruling, which in a regulated market is
-the evidence. What it stops doing is claiming a founder's typing was a decision somebody recorded —
-which inflated every decision count the product shows and moved a bar in "Who's current" that its
-own author could not clear.
-
-Read-side checked before the retype, not after: retrieval does not filter by entry type (the RLM
-special-cases only `decision.mistake`), entry types are not validated on write, and the unknown-type
-fallbacks are graceful (`threadKind` → `question`, `kindOf` → the type verbatim). `Correlate` is
-Kind-agnostic, so replay linkage survives unchanged. The 14 non-test `decision.made` consumers in
-quorum keep working; they simply stop counting prompts.
-
-- [x] the "Phase-2 LLM pass" comments are gone
-
-There is no Phase-2 pass. `DeriveSession` runs nomination straight into Refine, Correlate and the
-writer, so every threshold in `nominate.go` IS the shipped precision, not a pre-filter for a judge
-that would catch the rest. The comments said otherwise in four places and were the standing licence
-for over-collection. The founder reads that vocabulary as crossover from the benchmark, where all
-judging actually lives. Discussion `8d333082`.
