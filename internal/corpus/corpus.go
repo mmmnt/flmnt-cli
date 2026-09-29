@@ -66,7 +66,7 @@ func Render(entries []Entry) Report {
 			continue
 		}
 		if owner := ownerDoc(e, byID, docs); owner != "" {
-			bodies[owner].WriteString(e.Content + "\n")
+			bodies[owner].WriteString(section(e.Content))
 		}
 	}
 	for id, i := range fileOf {
@@ -86,6 +86,17 @@ func ownerDoc(e Entry, byID map[string]Entry, docs map[string]bool) string {
 		}
 	}
 	return ""
+}
+
+// section renders one entry as a markdown section: its opening sentence becomes the heading, the
+// rest the body. Doctrine entries are authored as "TITLE. prose…", so the split is the author's own
+// and not a guess at where a title ends.
+func section(content string) string {
+	heading, body := content, ""
+	if i := strings.Index(content, ". "); i >= 0 {
+		heading, body = content[:i], strings.TrimSpace(content[i+2:])
+	}
+	return "## " + strings.TrimSpace(heading) + "\n\n" + body + "\n"
 }
 
 // docTitle is the document's name: what follows the DOC-NODE marker, up to the page citation or the

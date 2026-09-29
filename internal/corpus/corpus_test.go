@@ -37,3 +37,15 @@ func TestAnEntryWhoseCausationChainReachesADocNodeIsASectionOfThatDocument(t *te
 		t.Errorf("section reached through a keyframe is missing:\n%s", r.Files[0].Markdown)
 	}
 }
+
+func TestASectionsHeadingIsItsFirstSentenceAndItsBodyTheRest(t *testing.T) {
+	r := Render([]Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "sec", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1a · CORE THESIS. Thesis: precision or halt. Corollary: never proceed plausibly."},
+	})
+
+	want := "## METHODOLOGY §1a · CORE THESIS\n\nThesis: precision or halt. Corollary: never proceed plausibly.\n"
+	if !strings.Contains(r.Files[0].Markdown, want) {
+		t.Errorf("want section rendered as\n%q\ngot\n%q", want, r.Files[0].Markdown)
+	}
+}
