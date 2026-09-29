@@ -186,3 +186,22 @@ func TestADocumentRecordsHowManySectionsItRendered(t *testing.T) {
 		t.Errorf("want 2 sections (a superseder replaces a section, it does not add one), got %d", r.Files[0].Sections)
 	}
 }
+
+func TestTwoRulingsThatAmendTheSameSectionBothRender(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "orig", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §5c · A/B/C/D. the subtask pattern."},
+		{ID: "amend-a", CausationID: "orig", EntryType: "decision.superseded", Content: "METHODOLOGY §5c AMENDED · A/B/C/D RETIRED. no subtasks."},
+		{ID: "amend-b", CausationID: "orig", EntryType: "decision.superseded", Content: "METHODOLOGY §5c · B-STEP CORRECTION. tests are never committed."},
+	})
+
+	md := r.Files[0].Markdown
+	for _, want := range []string{"\n## METHODOLOGY §5c AMENDED · A/B/C/D RETIRED\n", "\n## METHODOLOGY §5c · B-STEP CORRECTION\n"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("an amendment to the same section was dropped — want %q in\n%s", want, md)
+		}
+	}
+	if !strings.Contains(md, "replaced by `amend-a`, `amend-b`") {
+		t.Errorf("the appendix must name every ruling that replaced the original:\n%s", md)
+	}
+}
