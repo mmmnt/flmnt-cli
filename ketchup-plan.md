@@ -16,17 +16,31 @@ the same rendering — quorum's `training/` becomes the output of `flmnt corpus 
 - keyframes (50), explorations (4), plan snapshot (1), stream_created (1) are state/tentative, not
   doctrine: rendered nowhere, but COUNTED in the report so the drift is visible, never silent.
 
-## TODO
-- [ ] Burst 1: a DOC-NODE entry becomes a file named after its title [depends: none]
-- [ ] Burst 2: an entry whose causation chain reaches a doc-node is a section of that file [depends: 1]
-- [ ] Burst 3: sections render in stream order [depends: 2]
-- [ ] Burst 4: a section's heading is its content's first sentence, its body the rest [depends: 2]
-- [ ] Burst 5: every section is stamped with its entry id and timestamp [depends: 4]
-- [ ] Burst 6: a superseded section renders its superseder's content in its own position [depends: 3]
-- [ ] Burst 7: the replaced text survives in a Superseded appendix naming the superseder [depends: 6]
-- [ ] Burst 8: a supersession chain renders only the final superseder as current [depends: 6]
-- [ ] Burst 9: a doctrine decision that reaches no doc-node renders into rulings.md [depends: 2]
-- [ ] Burst 10: non-doctrine entry types render nowhere and are counted [depends: 9]
-- [ ] Burst 11: `flmnt corpus --out <dir>` fetches the slice and writes every file [depends: 10]
+## DONE — `flmnt corpus`, shipped
+Every burst TCR'd, 17 commits. Verified against the real corpus (d6dd5b65::domain, 187 entries):
 
-## DONE
+    the-methodology.md                 28 sections
+    system-architecture-reference.md   19 sections
+    specification-testing-reference.md 13 sections
+    ndd-palette-the-visual-workshop.md  7 sections
+    rulings.md                         31 sections
+    not doctrine, rendered nowhere: exploration.committed 4, keyframe.written 50,
+                                    plan.snapshot 1, system.stream_created 1
+
+THE PROOF THAT NOTHING IS LOST: 98 sections + 29 appendix entries = 127, which is exactly the
+doctrine the stream holds (99 decision.made + 32 decision.superseded − 4 DOC-NODE). That equality
+is a test, not an observation — TestEveryDoctrineEntryRendersExactlyOnce.
+
+THREE RULINGS THE FIRST DESIGN SILENTLY DROPPED, found by checking the count instead of reading
+the output:
+- Two entries are each superseded TWICE (deliberate amendments to different clauses of §5c and
+  §1d). A one-superseder-per-target map kept whichever came last and lost the other.
+- One supersession targets a KEYFRAME, so it belonged to no section and rendered nowhere — and it
+  was not even counted as unrendered, because supersessions were exempt from that count.
+Both fixed by rooting each entry in its own supersession lineage: a ruling whose target is not
+doctrine roots at itself, and branches render side by side in the original's position.
+
+ALSO FIXED HERE: the --project sweep test from 852f118 ENUMERATED four commands while its comment
+claimed to sweep. `corpus` proved the point by not being covered. It now sweeps cmd/*.go for
+`resolveProject(cmd` and fails on any file that resolves a project without registering the flag —
+verified by deleting corpus.go's flag registration and watching it fail by file name.
