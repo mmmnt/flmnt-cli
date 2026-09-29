@@ -39,15 +39,53 @@ var (
 
 // Render turns a stream slice into documents.
 func Render(entries []Entry) Report {
-	var r Report
+	byID := make(map[string]Entry, len(entries))
+	docs := make(map[string]bool)
 	for _, e := range entries {
-		if !strings.HasPrefix(e.Content, docNodePrefix) {
+		byID[e.ID] = e
+		if strings.HasPrefix(e.Content, docNodePrefix) {
+			docs[e.ID] = true
+		}
+	}
+
+	var r Report
+	fileOf := make(map[string]int)
+	bodies := make(map[string]*strings.Builder)
+	for _, e := range entries {
+		if !docs[e.ID] {
 			continue
 		}
 		title := docTitle(e.Content)
+		fileOf[e.ID] = len(r.Files)
+		bodies[e.ID] = &strings.Builder{}
 		r.Files = append(r.Files, File{Name: slug(title) + ".md", Title: title})
 	}
+
+	for _, e := range entries {
+		if docs[e.ID] || e.EntryType != "decision.made" {
+			continue
+		}
+		if owner := ownerDoc(e, byID, docs); owner != "" {
+			bodies[owner].WriteString(e.Content + "\n")
+		}
+	}
+	for id, i := range fileOf {
+		r.Files[i].Markdown = bodies[id].String()
+	}
 	return r
+}
+
+// ownerDoc walks causationId until it lands on a DOC-NODE; "" when the chain reaches none. Visited
+// ids are tracked so a self-referencing or cyclic chain terminates instead of spinning.
+func ownerDoc(e Entry, byID map[string]Entry, docs map[string]bool) string {
+	seen := map[string]bool{}
+	for cur, ok := e, true; ok && !seen[cur.ID]; cur, ok = byID[cur.CausationID] {
+		seen[cur.ID] = true
+		if docs[cur.ID] {
+			return cur.ID
+		}
+	}
+	return ""
 }
 
 // docTitle is the document's name: what follows the DOC-NODE marker, up to the page citation or the
