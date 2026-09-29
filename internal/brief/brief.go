@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
+	"github.com/mmmnt/flmnt-cli/internal/intent"
 )
 
 // Config controls a briefing render. GQL is the authenticated router GraphQL client; ProjectID scopes
@@ -17,6 +18,7 @@ type Config struct {
 	ProjectID    string
 	MaxDecisions int
 	MaxMistakes  int
+	MaxPrompts   int
 }
 
 type envelope struct {
@@ -62,6 +64,9 @@ func Render(cfg Config) (string, error) {
 	if cfg.MaxMistakes == 0 {
 		cfg.MaxMistakes = 4
 	}
+	if cfg.MaxPrompts == 0 {
+		cfg.MaxPrompts = 5
+	}
 	domain := cfg.ProjectID + "::domain"
 	mistakes := cfg.ProjectID + "::mistake"
 
@@ -93,6 +98,14 @@ func Render(cfg Config) (string, error) {
 		b.WriteString("\n")
 	}
 
+	// What the founder actually said. Everything above is the agent's own output — commits it made,
+	// decisions it recorded, mistakes it caught — so a session started knowing what it had DONE and not
+	// what it had been ASKED. Split by intent because a direction still outstanding and a question still
+	// unanswered need different things from the reader, and most captured sentences are neither.
+	prompts := pick(domainEntries, "prompt.captured", 40)
+	writeSentences(&b, "Their recent directions:", prompts, intent.Directive, cfg.MaxPrompts)
+	writeSentences(&b, "Their recent questions:", prompts, intent.Inquiry, cfg.MaxPrompts)
+
 	if mis := pick(cfg.entries(mistakes, 60), "decision.mistake", cfg.MaxMistakes); len(mis) > 0 {
 		b.WriteString("Recent mistakes (avoid repeating):\n")
 		for _, m := range mis {
@@ -105,6 +118,37 @@ func Render(cfg Config) (string, error) {
 		return "", nil
 	}
 	return "## Project memory (flmnt)\n\n" + out + "\n", nil
+}
+
+// writeSentences renders the sentences of `entries` that carry `want`, newest first, up to max.
+//
+// The unit is the SENTENCE, not the entry: 41% of real messages carry more than one intent, so "flmnt
+// updated. verify all commands updated/functional." belongs under directions for its second half alone.
+// Writes nothing — not even the heading — when no sentence qualifies.
+func writeSentences(b *strings.Builder, heading string, entries []envelope, want intent.Label, max int) {
+	var lines []string
+	for _, e := range entries {
+		for _, s := range intent.Sentences(e.Content) {
+			if intent.Of(s) != want {
+				continue
+			}
+			lines = append(lines, oneLine(s))
+			if len(lines) >= max {
+				break
+			}
+		}
+		if len(lines) >= max {
+			break
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	b.WriteString(heading + "\n")
+	for _, l := range lines {
+		b.WriteString("- " + l + "\n")
+	}
+	b.WriteString("\n")
 }
 
 func pick(entries []envelope, entryType string, max int) []envelope {
