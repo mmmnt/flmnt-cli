@@ -36,13 +36,14 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 		}
 
 		cfg := setup.Config{
-			ServerURL: serverURL,
-			ProjectID: projectID,
-			ProxyPort: proxyPort,
-			Proxy:     proxy,
-			GateCmd:   flmntCmd + " gate",
-			BriefCmd:  flmntCmd + " brief",
-			DeriveCmd: flmntCmd + " derive --hook",
+			ServerURL:   serverURL,
+			ProjectID:   projectID,
+			ProjectName: projectName,
+			ProxyPort:   proxyPort,
+			Proxy:       proxy,
+			GateCmd:     flmntCmd + " gate",
+			BriefCmd:    flmntCmd + " brief",
+			DeriveCmd:   flmntCmd + " derive --hook",
 		}
 
 		if err := setup.Run(cfg); err != nil {

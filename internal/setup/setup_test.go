@@ -240,3 +240,25 @@ func TestTheCommandCatalogShipsNoDeadCommand(t *testing.T) {
 		}
 	}
 }
+
+/*
+setup resolved the workspace NAME the founder typed and then threw it away, writing only the id. So
+
+	`whoami` inside a configured repo answered with a UUID while the same command outside one answered
+	with a name — one command, two vocabularies, for want of a field setup already held.
+*/
+func TestSetupWritesTheWorkspaceNameBesideItsID(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := Run(Config{ServerURL: "https://x/mcp", ProjectID: "p", ProjectName: "quorum", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc.ProjectName != "quorum" {
+		t.Errorf("want the name persisted so whoami can say it; got %q", pc.ProjectName)
+	}
+}

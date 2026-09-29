@@ -9,19 +9,24 @@ import (
 )
 
 type Config struct {
-	ServerURL string
-	ProjectID string // per-repo flmnt project written to the repo config (optional)
-	ProxyPort int
-	GateCmd   string // UserPromptSubmit: context-recency nudge (default: "flmnt gate")
-	BriefCmd  string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
-	DeriveCmd string // Stop: derive + import the finished session (default: "flmnt derive --hook")
-	Dir       string // project root; defaults to cwd
-	Proxy     bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
+	ServerURL   string
+	ProjectID   string // per-repo flmnt project written to the repo config (optional)
+	ProjectName string // the workspace's human name, so a reader is never shown a bare UUID
+	ProxyPort   int
+	GateCmd     string // UserPromptSubmit: context-recency nudge (default: "flmnt gate")
+	BriefCmd    string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
+	DeriveCmd   string // Stop: derive + import the finished session (default: "flmnt derive --hook")
+	Dir         string // project root; defaults to cwd
+	Proxy       bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
 }
 
 type ProjectConfig struct {
 	ServerURL string `json:"server_url"`
 	ProjectID string `json:"project_id,omitempty"` // per-repo flmnt project; derive/brief scope to it
+	// ProjectName is what a person calls that workspace. The id is what every command resolves; this
+	// exists so nothing has to show a bare UUID. Absent in a repo set up before it existed, which is
+	// why every reader falls back to the id rather than treating "" as the name.
+	ProjectName string `json:"project_name,omitempty"`
 }
 
 // The two .mcp.json server entries `setup` can manage:
@@ -93,7 +98,7 @@ func Run(cfg Config) error {
 
 func writeProjectConfig(dir string, cfg Config) error {
 	path := filepath.Join(dir, ".quorum.json")
-	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID})
+	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName})
 }
 
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {
