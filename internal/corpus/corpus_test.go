@@ -90,7 +90,7 @@ func TestASupersededSectionRendersItsSupersedersContentInItsOwnPosition(t *testi
 	})
 
 	md := r.Files[0].Markdown
-	if strings.Contains(md, "## METHODOLOGY §1a · GENERATED TESTS ARE COMMITTED\n") {
+	if strings.Contains(md, "\n## METHODOLOGY §1a · GENERATED TESTS ARE COMMITTED\n") {
 		t.Errorf("superseded heading still presented as current:\n%s", md)
 	}
 	if !strings.Contains(md, "## METHODOLOGY §1a · GENERATED TESTS ARE NEVER COMMITTED\n`new`") {
@@ -98,5 +98,24 @@ func TestASupersededSectionRendersItsSupersedersContentInItsOwnPosition(t *testi
 	}
 	if strings.Index(md, "NEVER COMMITTED") > strings.Index(md, "§9z") {
 		t.Errorf("superseder rendered after §9z instead of in §1a's position:\n%s", md)
+	}
+}
+
+func TestTheReplacedTextSurvivesInAnAppendixNamingItsSuperseder(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "old", CausationID: "doc-1", EntryType: "decision.made", Timestamp: "2026-08-05T00:00:00Z", Content: "METHODOLOGY §1a · TESTS ARE COMMITTED. Commit the compiled suite."},
+		{ID: "new", CausationID: "old", EntryType: "decision.superseded", Content: "METHODOLOGY §1a · TESTS ARE NEVER COMMITTED. CI compiles every run."},
+	})
+
+	md := r.Files[0].Markdown
+	for _, want := range []string{
+		"## Superseded\n",
+		"`old` · 2026-08-05T00:00:00Z — replaced by `new`",
+		"Commit the compiled suite.",
+	} {
+		if !strings.Contains(md, want) {
+			t.Errorf("want %q in\n%s", want, md)
+		}
 	}
 }

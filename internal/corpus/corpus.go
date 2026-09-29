@@ -59,6 +59,7 @@ func Render(streamID string, entries []Entry) Report {
 	var r Report
 	fileOf := make(map[string]int)
 	bodies := make(map[string]*strings.Builder)
+	replaced := make(map[string]*strings.Builder)
 	for _, e := range entries {
 		if !docs[e.ID] {
 			continue
@@ -66,6 +67,7 @@ func Render(streamID string, entries []Entry) Report {
 		title := docTitle(e.Content)
 		fileOf[e.ID] = len(r.Files)
 		bodies[e.ID] = &strings.Builder{}
+		replaced[e.ID] = &strings.Builder{}
 		bodies[e.ID].WriteString(header(streamID, e, title))
 		r.Files = append(r.Files, File{Name: slug(title) + ".md", Title: title})
 	}
@@ -74,12 +76,21 @@ func Render(streamID string, entries []Entry) Report {
 		if docs[e.ID] || e.EntryType != decisionType {
 			continue
 		}
-		if owner := ownerDoc(e, byID, docs); owner != "" {
-			bodies[owner].WriteString(section(current(e, byID, replacedBy)))
+		owner := ownerDoc(e, byID, docs)
+		if owner == "" {
+			continue
+		}
+		bodies[owner].WriteString(section(current(e, byID, replacedBy)))
+		for at := e; replacedBy[at.ID] != ""; at = byID[replacedBy[at.ID]] {
+			replaced[owner].WriteString(retired(at, replacedBy[at.ID]))
 		}
 	}
 	for id, i := range fileOf {
-		r.Files[i].Markdown = bodies[id].String()
+		md := bodies[id].String()
+		if past := replaced[id].String(); past != "" {
+			md += "## Superseded\n\nWhat these entries said before the ruling that replaced them. Kept so a reader\nmeeting the old wording elsewhere can see it was answered, not forgotten.\n\n" + past
+		}
+		r.Files[i].Markdown = md
 	}
 	return r
 }
@@ -131,16 +142,33 @@ func current(e Entry, byID map[string]Entry, replacedBy map[string]string) Entry
 	return e
 }
 
+// retired renders one replaced entry into the appendix — its own words, and the id that answered them.
+func retired(e Entry, by string) string {
+	return "### " + strings.TrimSpace(headingOf(e.Content)) + "\n`" + e.ID + "` · " + e.Timestamp +
+		" — replaced by `" + by + "`\n\n" + bodyOf(e.Content) + "\n"
+}
+
 // section renders one entry as a markdown section: its opening sentence becomes the heading, the
 // rest the body. Doctrine entries are authored as "TITLE. prose…", so the split is the author's own
 // and not a guess at where a title ends. The stamp is what makes a rendered claim checkable: a reader
 // who doubts a line can go read the entry it came from.
 func section(e Entry) string {
-	heading, body := e.Content, ""
-	if i := strings.Index(e.Content, ". "); i >= 0 {
-		heading, body = e.Content[:i], strings.TrimSpace(e.Content[i+2:])
+	return "## " + strings.TrimSpace(headingOf(e.Content)) + "\n`" + e.ID + "` · " + e.Timestamp +
+		"\n\n" + bodyOf(e.Content) + "\n"
+}
+
+func headingOf(content string) string {
+	if i := strings.Index(content, ". "); i >= 0 {
+		return content[:i]
 	}
-	return "## " + strings.TrimSpace(heading) + "\n`" + e.ID + "` · " + e.Timestamp + "\n\n" + body + "\n"
+	return content
+}
+
+func bodyOf(content string) string {
+	if i := strings.Index(content, ". "); i >= 0 {
+		return strings.TrimSpace(content[i+2:])
+	}
+	return ""
 }
 
 // docTitle is the document's name: what follows the DOC-NODE marker, up to the page citation or the
