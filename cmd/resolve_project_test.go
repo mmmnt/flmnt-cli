@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 /*
@@ -71,13 +72,34 @@ Every command that RESOLVES a project must accept the flag that overrides it. `g
 	flag" — inside a UserPromptSubmit hook, a hard failure — while both READMEs listed gate among the
 	commands where "an explicit --project" is step one of the documented order.
 
-	Swept rather than listed: a command added later that resolves a project is covered without anyone
-	remembering to extend this test, which is the whole failure mode here.
+	The first version of this test LISTED the four commands it knew about while its own comment claimed
+	to sweep — the defect it exists to catch, one layer up: `corpus` was added afterwards and the list
+	did not cover it. It now sweeps the package's own source, so a file that resolves a project and
+	forgets the flag fails here whether or not anyone remembers this test.
 */
 func TestEveryProjectResolvingCommandAcceptsTheFlag(t *testing.T) {
-	for _, c := range []*cobra.Command{briefCmd, deriveCmd, gateCmd, recordMetricCmd} {
-		if c.Flags().Lookup("project") == nil {
-			t.Errorf("%s resolves a project but does not register --project", c.Name())
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	swept := 0
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
 		}
+		src, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(src), "resolveProject(cmd") {
+			continue
+		}
+		swept++
+		if !strings.Contains(string(src), `Flags().String("project"`) {
+			t.Errorf("%s resolves a project but registers no --project flag", file)
+		}
+	}
+	if swept == 0 {
+		t.Fatal("the sweep matched no source file — it has stopped covering what it is for")
 	}
 }
