@@ -27,7 +27,7 @@ func TestNominateSession(t *testing.T) {
 		{Type: "pr-link", UUID: "p1", SessionID: "s9", Timestamp: "t2", PRNumber: 12, PRURL: "https://x/pr/12"},
 		{Type: "user", UUID: "u2", SessionID: "s9", Timestamp: "t3", Message: userMsg(corr)},
 		{Type: "user", UUID: "u3", SessionID: "s9", Timestamp: "t4", IsMeta: true, Message: userMsg(long)},
-		{Type: "user", UUID: "u4", SessionID: "s9", Timestamp: "t5", Message: userMsg("yes, proceed")}, // too short
+		{Type: "user", UUID: "u4", SessionID: "s9", Timestamp: "t5", Message: userMsg("yes, proceed")},
 	}
 
 	d := NominateSession("/repo", recs)
@@ -42,8 +42,8 @@ func TestNominateSession(t *testing.T) {
 	if c[KindCommit] != 1 {
 		t.Errorf("commit=%d want 1", c[KindCommit])
 	}
-	if c[KindPrompt] != 1 {
-		t.Errorf("prompts=%d want 1 (one long non-meta direction message; short + meta excluded)", c[KindPrompt])
+	if c[KindPrompt] != 2 {
+		t.Errorf("prompts=%d want 2 (both non-meta user messages; length no longer decides)", c[KindPrompt])
 	}
 	if c[KindMistake] != 2 {
 		t.Errorf("mistake=%d want 2 (tool error + user correction)", c[KindMistake])

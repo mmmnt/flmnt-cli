@@ -5,11 +5,6 @@ import (
 	"strings"
 )
 
-// promptMinLen filters trivial user messages ("yes", "proceed") out of prompt capture.
-// Nomination is the whole pipeline — there is no second pass judging what it produces. What a rule
-// here nominates is what gets written, so these thresholds ARE the shipped precision.
-const promptMinLen = 120
-
 // correctionMarkers flag a user message that is correcting the agent (a mistake signal).
 // Deliberately few: nothing downstream reviews these, so a marker that over-matches files a
 // mistake against the founder that they never made. A missed one is still captured, as a prompt.
@@ -65,7 +60,10 @@ func NominateSession(repo string, recs []Record) SessionDerivation {
 			// decision.made inflated every decision count and, until 03b643fa, held every agent behind
 			// in "Who'''s current" — the founder'''s own typing moved a bar nobody could clear.
 			txt := r.UserText()
-			if len(txt) < promptMinLen || isMeta(txt) || strings.HasPrefix(strings.TrimSpace(txt), "/") {
+			// Nothing said is nothing to capture. The byte floor was doing this job by accident: an
+			// assistant turn and a tool result both reach here carrying no user text, and only the
+			// 120-byte test kept them out of the record.
+			if strings.TrimSpace(txt) == "" || isMeta(txt) || strings.HasPrefix(strings.TrimSpace(txt), "/") {
 				continue
 			}
 			if isCorrection(txt) {

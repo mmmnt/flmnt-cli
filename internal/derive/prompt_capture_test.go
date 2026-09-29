@@ -31,3 +31,20 @@ func TestTheOtherDerivedTypesAreUnchanged(t *testing.T) {
 		}
 	}
 }
+
+/*
+Length is not significance, and a byte count was the only thing standing between a direction and the
+record. "flmnt updated. test latest updates." is 35 bytes and is unambiguously a direction; it was
+dropped for being under 120 while 236-character musings were captured as direction-setting. Ruling
+cc6a9636: classification is deterministic, and where no deterministic rule has been settled the
+record takes everything rather than guessing.
+*/
+func TestAShortDirectionIsCaptured(t *testing.T) {
+	recs := []Record{{Type: "user", UUID: "u1", SessionID: "s1", Message: userMsg("flmnt updated. test latest updates.")}}
+
+	d := NominateSession("/repo", recs)
+
+	if got := d.Counts()[KindPrompt]; got != 1 {
+		t.Errorf("prompts=%d want 1; a direction is not measured in bytes", got)
+	}
+}
