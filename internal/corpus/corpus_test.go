@@ -276,3 +276,24 @@ func TestAStreamWithNoDocNodeRendersNothing(t *testing.T) {
 		t.Errorf("a stream with no DOC-NODE is not a doctrine corpus — rulings.md supplements one, it does not stand in for one; got %d files", len(r.Files))
 	}
 }
+
+func TestTheHeaderRecordsTheNewestEntryItRenderedFrom(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Timestamp: "2026-08-05T19:56:10.188Z", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "old", CausationID: "doc-1", EntryType: "decision.made", Timestamp: "2026-08-06T00:00:00.000Z", Content: "METHODOLOGY §1 · ONE. one."},
+		{ID: "4d8a6f15", CausationID: "doc-1", EntryType: "decision.made", Timestamp: "2026-09-28T23:16:56.005Z", Content: "METHODOLOGY §2 · TWO. two."},
+	})
+
+	// Scoped to the HEADER — everything before the first section. The same timestamp and id appear in
+	// that entry's own section stamp, so an unscoped search would pass without a header at all.
+	md := r.Files[0].Markdown
+	header := md
+	if i := strings.Index(md, "\n## "); i >= 0 {
+		header = md[:i]
+	}
+	for _, want := range []string{"2026-09-28T23:16:56.005Z", "`4d8a6f15`", "3 entries"} {
+		if !strings.Contains(header, want) {
+			t.Errorf("a reader must be able to judge how current this is — want %q in the header\n%s", want, header)
+		}
+	}
+}
