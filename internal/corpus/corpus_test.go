@@ -205,3 +205,51 @@ func TestTwoRulingsThatAmendTheSameSectionBothRender(t *testing.T) {
 		t.Errorf("the appendix must name every ruling that replaced the original:\n%s", md)
 	}
 }
+
+func TestASupersessionOfSomethingThatIsNotDoctrineStillRenders(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "kf", CausationID: "doc-1", EntryType: "keyframe.written", Content: "HARVEST WRITE PATH UNDER WAY. state, not doctrine."},
+		{ID: "ruling", CausationID: "kf", EntryType: "decision.superseded", Content: "HARVEST IS FOUNDER-AUTHORISED. proceed."},
+	})
+
+	if !strings.Contains(r.Files[0].Markdown, "\n## HARVEST IS FOUNDER-AUTHORISED\n") {
+		t.Errorf("a supersession whose target is a keyframe was dropped:\n%s", r.Files[0].Markdown)
+	}
+	if r.Files[0].Sections != 1 {
+		t.Errorf("want it counted as a section, got %d", r.Files[0].Sections)
+	}
+}
+
+func TestEveryDoctrineEntryRendersExactlyOnce(t *testing.T) {
+	entries := []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "a", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1 · ONE. one."},
+		{ID: "b", CausationID: "a", EntryType: "decision.superseded", Content: "METHODOLOGY §1 · ONE REVISED. one again."},
+		{ID: "c", CausationID: "a", EntryType: "decision.superseded", Content: "METHODOLOGY §1 · ONE AMENDED. one also."},
+		{ID: "d", CausationID: "b", EntryType: "decision.superseded", Content: "METHODOLOGY §1 · ONE FINAL. one at last."},
+		{ID: "kf", CausationID: "doc-1", EntryType: "keyframe.written", Content: "NAVIGATION. state."},
+		{ID: "e", CausationID: "kf", EntryType: "decision.superseded", Content: "RULING ON STATE. doctrine anyway."},
+		{ID: "f", EntryType: "decision.made", Content: "FOUNDER RULING. unwired."},
+	}
+
+	r := Render("s::domain", entries)
+
+	doctrine := 0
+	for _, e := range entries {
+		if strings.HasPrefix(e.Content, "DOC-NODE") {
+			continue
+		}
+		if e.EntryType == "decision.made" || e.EntryType == "decision.superseded" {
+			doctrine++
+		}
+	}
+	rendered, retiredCount := 0, 0
+	for _, f := range r.Files {
+		rendered += f.Sections
+		retiredCount += strings.Count(f.Markdown, "— replaced by ")
+	}
+	if rendered+retiredCount != doctrine {
+		t.Errorf("%d doctrine entries but %d sections + %d retired — the render loses or duplicates entries", doctrine, rendered, retiredCount)
+	}
+}
