@@ -199,6 +199,7 @@ func runAuthHelper(command string) (string, error) {
 func init() {
 	for _, c := range []*cobra.Command{syncPushCmd, syncPullCmd} {
 		c.Flags().Bool("dry-run", false, "Show what would be moved without writing to the target")
+		c.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL); --remote-url wins over it")
 		c.Flags().String("remote-url", "", "Remote MCP server URL (default: active login)")
 		c.Flags().String("remote-workspace", "", "Remote workspace id (default: active workspace)")
 		c.Flags().String("local-url", defaultLocalURL, "Local MCP server URL")
