@@ -68,8 +68,15 @@ func resolveAuthServerURL(cmd *cobra.Command) string {
 	if v := envOr("QUORUM_SERVER_URL", ""); v != "" {
 		return v
 	}
-	if pc, err := setup.LoadProjectConfig(""); err == nil {
+	if pc, err := setup.LoadProjectConfig(""); err == nil && pc.ServerURL != "" {
 		return pc.ServerURL
+	}
+	// Last, the login already on disk. resolveActiveWorkspace below falls back to this same file for
+	// the workspace, so resolving the server URL anywhere else left the two halves of "where am I"
+	// disagreeing: outside a configured repo every command refused, with the answer sitting in the
+	// config. A repo still wins — this only turns a refusal into an answer.
+	if cfg, err := authHeaderLoadConfig(); err == nil {
+		return cfg.ServerURL
 	}
 	return ""
 }
