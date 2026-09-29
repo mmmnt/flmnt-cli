@@ -138,3 +138,20 @@ func TestASupersessionChainRendersOnlyItsFinalRulingAsCurrent(t *testing.T) {
 		}
 	}
 }
+
+func TestADoctrineDecisionThatReachesNoDocNodeStillRenders(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "ruling", EntryType: "decision.made", Timestamp: "2026-09-28T00:00:00Z", Content: "FOUNDER RULING (2026-09-28). Workspace isolation is provided by access permissions."},
+	})
+
+	if len(r.Files) != 2 {
+		t.Fatalf("want a rulings file beside the document, got %d files", len(r.Files))
+	}
+	if r.Files[1].Name != "rulings.md" {
+		t.Errorf("want rulings.md, got %q", r.Files[1].Name)
+	}
+	if !strings.Contains(r.Files[1].Markdown, "## FOUNDER RULING (2026-09-28)\n`ruling`") {
+		t.Errorf("unassigned ruling missing:\n%s", r.Files[1].Markdown)
+	}
+}
