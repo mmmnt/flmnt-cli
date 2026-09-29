@@ -46,11 +46,11 @@ var whoamiCmd = &cobra.Command{
 		if identity == "" {
 			identity = claims.Sub
 		}
-		pinned := ""
+		pinned, pinnedName := "", ""
 		if pc, perr := setup.LoadProjectConfig(""); perr == nil {
-			pinned = pc.ProjectID
+			pinned, pinnedName = pc.ProjectID, pc.ProjectName
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(identity, cfg.ActiveWorkspaceName, pinned))
+		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(identity, cfg.ActiveWorkspaceName, pinned, pinnedName))
 		return nil
 	},
 }
@@ -62,8 +62,13 @@ func init() {
 
 // whoamiLine says which workspace is actually in force. A repo that has been set up records into its
 // OWN workspace regardless of the active one, so naming the active workspace there would answer a
-// question nobody asked and hide the one that governs.
-func whoamiLine(identity, activeName, pinned string) string {
+// question nobody asked and hide the one that governs. The pinned workspace is shown by NAME when the
+// repo config records one; a repo set up before that field existed still shows the id, which is the
+// only truth available there.
+func whoamiLine(identity, activeName, pinned, pinnedName string) string {
+	if pinnedName != "" {
+		return fmt.Sprintf("%s  (this repo records into: %s)", identity, pinnedName)
+	}
 	if pinned != "" {
 		return fmt.Sprintf("%s  (this repo records into: %s)", identity, pinned)
 	}
