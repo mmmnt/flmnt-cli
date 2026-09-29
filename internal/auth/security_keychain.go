@@ -69,4 +69,6 @@ func (s securityKeyring) Remove(key string) error {
 func (s securityKeyring) Keys() ([]string, error) { return nil, nil }
 
 // GetMetadata is not exposed by the security CLI; the token store never reads it.
-func (s securityKeyring) GetMetadata(string) (keyring.Metadata, error) { return keyring.Metadata{}, nil }
+func (s securityKeyring) GetMetadata(string) (keyring.Metadata, error) {
+	return keyring.Metadata{}, nil
+}
