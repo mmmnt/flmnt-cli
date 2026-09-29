@@ -3,6 +3,8 @@ package corpus
 import (
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 // Write puts every rendered document in dir, creating it when it does not exist. It returns the
@@ -20,4 +22,27 @@ func Write(dir string, r Report) ([]string, error) {
 		written = append(written, path)
 	}
 	return written, nil
+}
+
+// Stray names the markdown already in dir that this render did not produce. A generated corpus that
+// leaves a hand-authored file beside it is the exact trap this command exists to remove: a reader
+// grepping the directory finds the stale document first. Naming them is safe where deleting is not.
+func Stray(dir string, r Report) ([]string, error) {
+	generated := make(map[string]bool, len(r.Files))
+	for _, f := range r.Files {
+		generated[f.Name] = true
+	}
+	items, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var stray []string
+	for _, item := range items {
+		if item.IsDir() || !strings.HasSuffix(item.Name(), ".md") || generated[item.Name()] {
+			continue
+		}
+		stray = append(stray, item.Name())
+	}
+	sort.Strings(stray)
+	return stray, nil
 }
