@@ -1,33 +1,26 @@
-# ketchup-plan — the corpus render says how current it is, and refreshes itself
+# ketchup-plan — derive's writes carry their author
 
-Founder ruling 2026-09-28 (both options): stamp the render with its high-water mark AND refresh it
-from a SessionStart hook. Closes the quiet half of the "generated, never hand-maintained" ruling —
-the files were derived but only when somebody remembered to derive them.
-
-## Design
-- The corpus lives in a DIFFERENT workspace from the repo's own (quorum records into bc674142; the
-  doctrine is in d6dd5b65). So the hook cannot reuse `--project`; setup needs to be told which
-  workspace holds the corpus, and wires the hook only when it is told.
-- The hook must fail QUIET like `brief` and `gate` — offline, not logged in, or a workspace with no
-  DOC-NODE must leave the files alone and say nothing, never break a session start.
+Part of the "Who's current" work (quorum plan `cada32c2`, ruling `ad840995`).
 
 ## DONE
-- [x] Burst 1: the generated header records the newest entry the render came from
-- [x] Burst 2: `flmnt corpus --hook` fails quiet and writes nothing when it cannot render
-- [x] Burst 3: `flmnt setup --corpus-project` records which workspace holds the corpus
-- [x] Burst 4: setup wires the SessionStart refresh only when a corpus workspace is recorded
-- [x] `--corpus-project` registered on setup and resolved by NAME
+- [x] `internal/derive/writer.go` posts `memoryDerive` instead of `memoryImport`
 
-VERIFIED END TO END in a throwaway repo, not by flag-shape assertion:
-`setup --project quorum --corpus-project platform` resolved both names, wrote
-`corpus_project: d6dd5b65-…` beside `project_id: bc674142-…`, and wired
-`flmnt corpus --hook --project d6dd5b65-…` as the third SessionStart hook. Running that hook
-rendered five documents silently (exit 0); pointing it at a workspace with no DOC-NODE exited 0 and
-wrote nothing. Header now reads: "Rendered from 187 entries; newest `fac52696-…` at 2026-09-28T23:23:18.961Z."
+Derive AUTHORS the entries it writes, but it posted them through `memoryImport` — the replication
+mutation, which deliberately attributes nobody so that moving someone else's history cannot acquire an
+author from whoever ran the move. The consequence was that every derived decision landed authorless,
+and an authorless decision used to hold every agent behind in the dashboard's "Who's current".
 
-## Not building, and why
-A separate drift detector that compares the file's stamp against the live stream. With the hook
-refreshing every session start, the only window it could report is one the next session closes — and
-the stamp already lets a reader judge age without a tool.
+Verified by re-introduction: pointing the writer back at `memoryImport` fails the test by name.
+Full gate green — 13 packages, `go vet` clean, `gofmt` clean.
 
-## DONE
+## BLOCKED ON A RELEASE ORDER — do not tag until quorum v1.10.12 is LIVE
+`memoryDerive` only becomes reachable once the dashboard deploy recomposes `router.json` from the
+memory subgraph's SDL (`docker/supergraph.production.yaml` reads
+`packages/core/src/graphql/schema.graphql`). Releasing this CLI first would make every `flmnt derive`
+fail on an unknown field — and `--hook` swallows write errors, so it would fail SILENTLY.
+Probe production for the mutation before tagging.
+
+## STILL OPEN (not this change)
+- A captured prompt is recorded as `decision.made`, which it is not. Ruled, planned, not built.
+- `internal/derive/nominate.go` comments promise a "Phase-2 LLM pass" that does not exist; the founder
+  reads that vocabulary as crossover from the benchmark. Discussion parked as `8d333082`.

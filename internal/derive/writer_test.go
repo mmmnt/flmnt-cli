@@ -11,10 +11,10 @@ import (
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 )
 
-// TestWriteSessionRunsMemoryImportAuthenticated verifies the writer's contract: it runs the
-// memoryImport mutation through the router with a bearer token, scopes to the workspace via projectId,
+// TestWriteSessionRunsMemoryDeriveAuthenticated verifies the writer's contract: it runs the
+// memoryDerive mutation through the router with a bearer token, scopes to the workspace via projectId,
 // and routes decisions→domain, mistakes→mistake with events carried as a JSON string.
-func TestWriteSessionRunsMemoryImportAuthenticated(t *testing.T) {
+func TestWriteSessionRunsMemoryDeriveAuthenticated(t *testing.T) {
 	var gotAuth, gotQuery string
 	var vars map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +27,7 @@ func TestWriteSessionRunsMemoryImportAuthenticated(t *testing.T) {
 		_ = json.Unmarshal(raw, &req)
 		gotQuery = req.Query
 		vars = req.Variables
-		_, _ = w.Write([]byte(`{"data":{"memoryImport":{"imported":[{"streamSuffix":"domain","appended":1,"skipped":0}]}}}`))
+		_, _ = w.Write([]byte(`{"data":{"memoryDerive":{"imported":[{"streamSuffix":"domain","appended":1,"skipped":0}]}}}`))
 	}))
 	defer srv.Close()
 
@@ -45,8 +45,15 @@ func TestWriteSessionRunsMemoryImportAuthenticated(t *testing.T) {
 		t.Fatalf("WriteSession: %v", err)
 	}
 
-	if !strings.Contains(gotQuery, "memoryImport") {
-		t.Errorf("query = %q, want memoryImport", gotQuery)
+	// derive AUTHORS these entries, so it uses the originating mutation, which carries the caller as
+	// the entry's actor. memoryImport is for REPLICATION and deliberately attributes nobody — sending
+	// authored entries down it is what left every derived decision with no author, and an authorless
+	// decision used to hold every agent behind in the dashboard's "Who's current".
+	if !strings.Contains(gotQuery, "memoryDerive") {
+		t.Errorf("query = %q, want memoryDerive", gotQuery)
+	}
+	if strings.Contains(gotQuery, "memoryImport") {
+		t.Errorf("query = %q must not use the replication mutation", gotQuery)
 	}
 	if gotAuth != "Bearer tok" {
 		t.Errorf("Authorization = %q, want Bearer tok", gotAuth)
@@ -80,7 +87,7 @@ func TestWriteSessionOmitsAuthForLocalStack(t *testing.T) {
 	var hadAuth bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, hadAuth = r.Header["Authorization"]
-		_, _ = w.Write([]byte(`{"data":{"memoryImport":{"imported":[]}}}`))
+		_, _ = w.Write([]byte(`{"data":{"memoryDerive":{"imported":[]}}}`))
 	}))
 	defer srv.Close()
 
