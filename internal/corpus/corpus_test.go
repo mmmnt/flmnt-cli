@@ -265,3 +265,14 @@ func TestASectionEndsWithABlankLineSoTheNextHeadingIsNotCrowded(t *testing.T) {
 		t.Errorf("a section must be separated from the next heading:\n%s", r.Files[0].Markdown)
 	}
 }
+
+func TestAStreamWithNoDocNodeRendersNothing(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "a", EntryType: "decision.made", Content: "USE POSTGRES. for persistence."},
+		{ID: "b", EntryType: "decision.made", Content: "SHARD BY TENANT. one schema each."},
+	})
+
+	if len(r.Files) != 0 {
+		t.Errorf("a stream with no DOC-NODE is not a doctrine corpus — rulings.md supplements one, it does not stand in for one; got %d files", len(r.Files))
+	}
+}

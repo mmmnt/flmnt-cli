@@ -50,10 +50,17 @@ var (
 
 // Render turns a stream slice into documents. Every doctrine entry lands in exactly one place — a
 // section or the Superseded appendix — so nothing the stream holds can be lost in the rendering.
+//
+// A stream with no DOC-NODE renders nothing at all. rulings.md exists to catch doctrine that belongs
+// to a corpus and was never wired into it; with no corpus there is nothing for it to supplement, and
+// rendering one would turn an ordinary project stream into a single file of every decision it holds.
 func Render(streamID string, entries []Entry) Report {
 	x := index(entries)
 
 	r := Report{Unrendered: map[string]int{}}
+	if len(x.docs) == 0 {
+		return r
+	}
 	fileOf := make(map[string]int)
 	bodies := make(map[string]*strings.Builder)
 	replaced := make(map[string]*strings.Builder)
