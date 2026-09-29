@@ -253,3 +253,15 @@ func TestEveryDoctrineEntryRendersExactlyOnce(t *testing.T) {
 		t.Errorf("%d doctrine entries but %d sections + %d retired — the render loses or duplicates entries", doctrine, rendered, retiredCount)
 	}
 }
+
+func TestASectionEndsWithABlankLineSoTheNextHeadingIsNotCrowded(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "a", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1 · ONE. one."},
+		{ID: "b", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §2 · TWO. two."},
+	})
+
+	if !strings.Contains(r.Files[0].Markdown, "one.\n\n## METHODOLOGY §2") {
+		t.Errorf("a section must be separated from the next heading:\n%s", r.Files[0].Markdown)
+	}
+}

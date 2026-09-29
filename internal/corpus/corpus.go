@@ -236,7 +236,7 @@ func retired(e Entry, by []string) string {
 		names = append(names, "`"+id+"`")
 	}
 	return "### " + strings.TrimSpace(headingOf(e.Content)) + "\n`" + e.ID + "` · " + e.Timestamp +
-		" — replaced by " + strings.Join(names, ", ") + "\n\n" + bodyOf(e.Content) + "\n"
+		" — replaced by " + strings.Join(names, ", ") + "\n\n" + bodyOf(e.Content) + "\n\n"
 }
 
 // section renders one entry as a markdown section: its opening sentence becomes the heading, the
@@ -245,7 +245,7 @@ func retired(e Entry, by []string) string {
 // who doubts a line can go read the entry it came from.
 func section(e Entry) string {
 	return "## " + strings.TrimSpace(headingOf(e.Content)) + "\n`" + e.ID + "` · " + e.Timestamp +
-		"\n\n" + bodyOf(e.Content) + "\n"
+		"\n\n" + bodyOf(e.Content) + "\n\n"
 }
 
 func headingOf(content string) string {
