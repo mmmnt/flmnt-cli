@@ -54,3 +54,26 @@ func TestARepoStillOutranksTheRecordedLogin(t *testing.T) {
 		t.Errorf("the repo's own server URL must win; got %q", got)
 	}
 }
+
+/*
+sync's remote URL resolves through the same chain, so the login fallback reaches it too. Locked before
+
+	removing the copy of that fallback sync.go carried: once resolveAuthServerURL consults the login
+	config, a second identical lookup below it can only ever return the same empty string.
+*/
+func TestSyncsRemoteURLAlsoFallsBackToTheRecordedLogin(t *testing.T) {
+	orig := authHeaderLoadConfig
+	defer func() { authHeaderLoadConfig = orig }()
+	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{ServerURL: "https://mcp.production.flmnt.ai/mcp"}, nil
+	}
+	t.Setenv("QUORUM_SERVER_URL", "")
+	t.Chdir(t.TempDir())
+	c := &cobra.Command{}
+	c.Flags().String("server-url", "", "")
+	c.Flags().String("remote-url", "", "")
+
+	if got := resolveRemoteServerURL(c); got != "https://mcp.production.flmnt.ai/mcp" {
+		t.Errorf("sync must reach the recorded login too; got %q", got)
+	}
+}
