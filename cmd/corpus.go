@@ -22,6 +22,17 @@ var corpusCmd = &cobra.Command{
 }
 
 func runCorpus(cmd *cobra.Command, args []string) error {
+	err := renderCorpus(cmd)
+	// A SessionStart refresh runs before anybody has typed anything. Offline, not logged in, or aimed
+	// at a workspace with no DOC-NODE, it leaves the files alone and says nothing — the same contract
+	// `brief` and `gate` keep in hooks. Run by hand it reports, because then somebody is listening.
+	if hook, _ := cmd.Flags().GetBool("hook"); hook {
+		return nil
+	}
+	return err
+}
+
+func renderCorpus(cmd *cobra.Command) error {
 	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
 		return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
@@ -54,7 +65,9 @@ func runCorpus(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprint(cmd.OutOrStdout(), corpusSummary(out, report, stray))
+	if hook, _ := cmd.Flags().GetBool("hook"); !hook {
+		fmt.Fprint(cmd.OutOrStdout(), corpusSummary(out, report, stray))
+	}
 	return nil
 }
 
@@ -88,5 +101,6 @@ func init() {
 	corpusCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL)")
 	corpusCmd.Flags().String("project", "", "workspace name or id whose doctrine stream to render (default: this repo's own setting)")
 	corpusCmd.Flags().String("out", "training", "directory to write the documents into")
+	corpusCmd.Flags().Bool("hook", false, "SessionStart mode: refresh silently and never fail a session start")
 	rootCmd.AddCommand(corpusCmd)
 }
