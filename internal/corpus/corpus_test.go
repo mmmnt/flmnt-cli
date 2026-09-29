@@ -80,3 +80,23 @@ func TestADocumentOpensWithItsTitleAndSaysWhatGeneratedIt(t *testing.T) {
 		}
 	}
 }
+
+func TestASupersededSectionRendersItsSupersedersContentInItsOwnPosition(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "old", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1a · GENERATED TESTS ARE COMMITTED. Commit the compiled suite."},
+		{ID: "z-end", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §9z · CLOSING. Last section."},
+		{ID: "new", CausationID: "old", EntryType: "decision.superseded", Content: "METHODOLOGY §1a · GENERATED TESTS ARE NEVER COMMITTED. CI compiles every run."},
+	})
+
+	md := r.Files[0].Markdown
+	if strings.Contains(md, "## METHODOLOGY §1a · GENERATED TESTS ARE COMMITTED\n") {
+		t.Errorf("superseded heading still presented as current:\n%s", md)
+	}
+	if !strings.Contains(md, "## METHODOLOGY §1a · GENERATED TESTS ARE NEVER COMMITTED\n`new`") {
+		t.Errorf("superseder missing:\n%s", md)
+	}
+	if strings.Index(md, "NEVER COMMITTED") > strings.Index(md, "§9z") {
+		t.Errorf("superseder rendered after §9z instead of in §1a's position:\n%s", md)
+	}
+}

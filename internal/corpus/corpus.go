@@ -30,7 +30,11 @@ type Report struct {
 	Files []File
 }
 
-const docNodePrefix = "DOC-NODE · "
+const (
+	docNodePrefix  = "DOC-NODE · "
+	decisionType   = "decision.made"
+	supersededType = "decision.superseded"
+)
 
 var (
 	trailingVersion = regexp.MustCompile(`\s+v\d+(\.\d+)*$`)
@@ -41,10 +45,14 @@ var (
 func Render(streamID string, entries []Entry) Report {
 	byID := make(map[string]Entry, len(entries))
 	docs := make(map[string]bool)
+	replacedBy := make(map[string]string)
 	for _, e := range entries {
 		byID[e.ID] = e
 		if strings.HasPrefix(e.Content, docNodePrefix) {
 			docs[e.ID] = true
+		}
+		if e.EntryType == supersededType {
+			replacedBy[e.CausationID] = e.ID
 		}
 	}
 
@@ -63,11 +71,11 @@ func Render(streamID string, entries []Entry) Report {
 	}
 
 	for _, e := range entries {
-		if docs[e.ID] || e.EntryType != "decision.made" {
+		if docs[e.ID] || e.EntryType != decisionType {
 			continue
 		}
 		if owner := ownerDoc(e, byID, docs); owner != "" {
-			bodies[owner].WriteString(section(e))
+			bodies[owner].WriteString(section(current(e, byID, replacedBy)))
 		}
 	}
 	for id, i := range fileOf {
@@ -106,6 +114,21 @@ func docScope(content string) string {
 		return rest[i+len(" — "):]
 	}
 	return ""
+}
+
+// current follows the supersession chain from an entry to the ruling that stands today. A superseder
+// takes the position of what it replaced, so a document keeps its shape while its doctrine moves on.
+func current(e Entry, byID map[string]Entry, replacedBy map[string]string) Entry {
+	seen := map[string]bool{}
+	for !seen[e.ID] {
+		seen[e.ID] = true
+		next, ok := byID[replacedBy[e.ID]]
+		if !ok {
+			return e
+		}
+		e = next
+	}
+	return e
 }
 
 // section renders one entry as a markdown section: its opening sentence becomes the heading, the
