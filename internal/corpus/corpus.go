@@ -66,7 +66,7 @@ func Render(entries []Entry) Report {
 			continue
 		}
 		if owner := ownerDoc(e, byID, docs); owner != "" {
-			bodies[owner].WriteString(section(e.Content))
+			bodies[owner].WriteString(section(e))
 		}
 	}
 	for id, i := range fileOf {
@@ -90,13 +90,14 @@ func ownerDoc(e Entry, byID map[string]Entry, docs map[string]bool) string {
 
 // section renders one entry as a markdown section: its opening sentence becomes the heading, the
 // rest the body. Doctrine entries are authored as "TITLE. prose…", so the split is the author's own
-// and not a guess at where a title ends.
-func section(content string) string {
-	heading, body := content, ""
-	if i := strings.Index(content, ". "); i >= 0 {
-		heading, body = content[:i], strings.TrimSpace(content[i+2:])
+// and not a guess at where a title ends. The stamp is what makes a rendered claim checkable: a reader
+// who doubts a line can go read the entry it came from.
+func section(e Entry) string {
+	heading, body := e.Content, ""
+	if i := strings.Index(e.Content, ". "); i >= 0 {
+		heading, body = e.Content[:i], strings.TrimSpace(e.Content[i+2:])
 	}
-	return "## " + strings.TrimSpace(heading) + "\n\n" + body + "\n"
+	return "## " + strings.TrimSpace(heading) + "\n`" + e.ID + "` · " + e.Timestamp + "\n\n" + body + "\n"
 }
 
 // docTitle is the document's name: what follows the DOC-NODE marker, up to the page citation or the

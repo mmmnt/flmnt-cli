@@ -44,8 +44,21 @@ func TestASectionsHeadingIsItsFirstSentenceAndItsBodyTheRest(t *testing.T) {
 		{ID: "sec", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1a · CORE THESIS. Thesis: precision or halt. Corollary: never proceed plausibly."},
 	})
 
-	want := "## METHODOLOGY §1a · CORE THESIS\n\nThesis: precision or halt. Corollary: never proceed plausibly.\n"
+	for _, want := range []string{"## METHODOLOGY §1a · CORE THESIS\n", "\nThesis: precision or halt. Corollary: never proceed plausibly.\n"} {
+		if !strings.Contains(r.Files[0].Markdown, want) {
+			t.Errorf("want %q in\n%q", want, r.Files[0].Markdown)
+		}
+	}
+}
+
+func TestEverySectionIsStampedWithTheEntryItCameFrom(t *testing.T) {
+	r := Render([]Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "1768ca87", CausationID: "doc-1", EntryType: "decision.made", Timestamp: "2026-08-05T19:56:10.188Z", Content: "METHODOLOGY §1a · CORE THESIS. Thesis: precision or halt."},
+	})
+
+	want := "## METHODOLOGY §1a · CORE THESIS\n`1768ca87` · 2026-08-05T19:56:10.188Z\n\nThesis: precision or halt.\n"
 	if !strings.Contains(r.Files[0].Markdown, want) {
-		t.Errorf("want section rendered as\n%q\ngot\n%q", want, r.Files[0].Markdown)
+		t.Errorf("want\n%q\ngot\n%q", want, r.Files[0].Markdown)
 	}
 }
