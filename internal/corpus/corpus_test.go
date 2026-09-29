@@ -119,3 +119,22 @@ func TestTheReplacedTextSurvivesInAnAppendixNamingItsSuperseder(t *testing.T) {
 		}
 	}
 }
+
+func TestASupersessionChainRendersOnlyItsFinalRulingAsCurrent(t *testing.T) {
+	r := Render("s::domain", []Entry{
+		{ID: "doc-1", EntryType: "decision.made", Content: "DOC-NODE · THE METHODOLOGY v4.1 (page 1) — the stack."},
+		{ID: "v1", CausationID: "doc-1", EntryType: "decision.made", Content: "METHODOLOGY §1a · FIRST. one."},
+		{ID: "v2", CausationID: "v1", EntryType: "decision.superseded", Content: "METHODOLOGY §1a · SECOND. two."},
+		{ID: "v3", CausationID: "v2", EntryType: "decision.superseded", Content: "METHODOLOGY §1a · THIRD. three."},
+	})
+
+	md := r.Files[0].Markdown
+	if !strings.Contains(md, "\n## METHODOLOGY §1a · THIRD\n") {
+		t.Errorf("last ruling in the chain is not the current section:\n%s", md)
+	}
+	for _, stale := range []string{"\n## METHODOLOGY §1a · FIRST\n", "\n## METHODOLOGY §1a · SECOND\n"} {
+		if strings.Contains(md, stale) {
+			t.Errorf("%q is still presented as current:\n%s", stale, md)
+		}
+	}
+}
