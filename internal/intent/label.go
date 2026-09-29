@@ -49,6 +49,13 @@ var interrogativeOpeners = map[string]bool{
 	"why": true, "will": true, "would": true,
 }
 
+// subordinateOpeners open a question and a condition equally, so only a terminal question mark tells
+// them apart. Without one they are asserting something: thirteen of the corpus's inquiries were
+// clauses like "when you get ready to push changes to billing, there's no CI hooked up".
+var subordinateOpeners = map[string]bool{
+	"as": true, "if": true, "since": true, "when": true, "where": true, "while": true,
+}
+
 var leadingMarker = regexp.MustCompile(`^\d+(?:\.\d+)*[.)]\s*`)
 var firstWord = regexp.MustCompile(`^[a-z'-]+`)
 
@@ -66,6 +73,8 @@ func Of(s string) Label {
 	switch {
 	case imperativeOpeners[word]:
 		return Directive
+	case subordinateOpeners[word]:
+		return Assertion
 	case interrogativeOpeners[word]:
 		return Inquiry
 	default:

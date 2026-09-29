@@ -28,3 +28,27 @@ func TestAnInterrogativeOpenerWithoutAQuestionMarkIsStillAnInquiry(t *testing.T)
 		t.Errorf("Of(%q) = %q, want %q", "whats your feature branch again", got, Inquiry)
 	}
 }
+
+/*
+Thirteen of the 78 sentences this rule called inquiries in the real corpus are subordinate clauses, not
+questions — "when you get ready to push changes to billing, there's no CI hooked up", "If they do, you
+go current immediately", "When you build page-by-page, make sure to take the page as the source of
+truth". A word that opens a question can equally open a condition, and only the question mark tells
+them apart.
+*/
+func TestASubordinateOpenerWithoutAQuestionMarkIsAnAssertion(t *testing.T) {
+	for _, s := range []string{
+		"when you get ready to push changes to billing, there's no CI hooked up.",
+		"If they do, you go current immediately.",
+	} {
+		if got := Of(s); got != Assertion {
+			t.Errorf("Of(%q) = %q, want %q", s, got, Assertion)
+		}
+	}
+}
+
+func TestASubordinateOpenerWithAQuestionMarkIsStillAnInquiry(t *testing.T) {
+	if got := Of("when did that land?"); got != Inquiry {
+		t.Errorf("Of(%q) = %q, want %q", "when did that land?", got, Inquiry)
+	}
+}
