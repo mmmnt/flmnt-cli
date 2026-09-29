@@ -1,46 +1,37 @@
-# ketchup-plan — `flmnt corpus`
+# ketchup-plan — flmnt 1.10.4 full-surface verification (2026-09-28)
 
-Founder ruling 2026-09-28: the training/*.md doctrine snapshots are GENERATED from the flmnt
-stream, never hand-maintained. The renderer lives here (not in quorum) because the CLI already
-owns production auth and the router GraphQL client, and because every repo carrying the kit wants
-the same rendering — quorum's `training/` becomes the output of `flmnt corpus --out training`.
+Founder: "flmnt updated. verify all commands updated/functional." Swept all 21 commands and 15
+subcommands from `--help` itself rather than a hand-list, then exercised each against production.
 
-## Derivable structure (verified against d6dd5b65::domain, 187 entries, 2026-09-28)
-- A DOC-NODE entry is `decision.made` whose content starts `DOC-NODE · <TITLE> (page N) — …`.
-  Four exist. Each is one output file.
-- A section entry reaches its doc-node by walking `causationId`. 102 of 187 entries do.
-- A supersession is `decision.superseded`; its `causationId` IS the id it replaces. No graph query
-  needed — the collapse is computable from the slice alone.
-- 30 `decision.made` entries reach no doc-node (later founder rulings). They are doctrine and must
-  render, not vanish → `rulings.md`.
-- keyframes (50), explorations (4), plan snapshot (1), stream_created (1) are state/tentative, not
-  doctrine: rendered nowhere, but COUNTED in the report so the drift is visible, never silent.
+## TODO
+- [ ] Burst 1: `flmnt dashboard` opens the dashboard for the environment you are signed in to [depends: none]
+- [ ] Burst 2: every command that resolves an auth server URL registers --server-url [depends: 1]
 
-## DONE — `flmnt corpus`, shipped
-Every burst TCR'd, 17 commits. Verified against the real corpus (d6dd5b65::domain, 187 entries):
+## FOUND BY THE SWEEP
+- `corpus` rendered a single 1090-section rulings.md for a workspace with NO DOC-NODE instead of
+  refusing — and the refusal message I wrote was unreachable dead code, because rulings.md is
+  created whenever any decision is unwired, which is every real project stream. FIXED b0fb92b.
+- `dashboard` opens `http://localhost:3001` — `browser.ResolveURL()` reads QUORUM_DASHBOARD_URL and
+  otherwise hardcodes the local stack, ignoring the login config every other command resolves. For
+  anyone signed in to production, which is everyone, the command opens a dead URL. Its test ASSERTS
+  the localhost default, so the gate blessed it. This is the whoami defect of v1.10.2 unfixed in a
+  sibling — exactly what CLAUDE.md means by auditing every sibling the same hour.
 
-    the-methodology.md                 28 sections
-    system-architecture-reference.md   19 sections
-    specification-testing-reference.md 13 sections
-    ndd-palette-the-visual-workshop.md  7 sections
-    rulings.md                         31 sections
-    not doctrine, rendered nowhere: exploration.committed 4, keyframe.written 50,
-                                    plan.snapshot 1, system.stream_created 1
+## VERIFIED FUNCTIONAL against production
+whoami · workspace list (17 workspaces, `platform` resolves by name) · mcp auth-header · brief
+(picks up the new keyframe) · gate (silent when fresh, nudges at --threshold 1s) · health (reports
+the local stack down, exit 1) · corpus (by id AND by name; 98 sections + 29 retired = 127) ·
+derive --dry-run (7 sessions, 65 decisions) · sync pull/push --dry-run (exit 1, blocked on the local
+broker being down — environmental, message names the cause) · setup (throwaway repo: 12 commands, no
+hydrate leftovers, no dead grant, project resolved by NAME) · record-metric + record-attestation
+(two metric.recorded entries read back) · record-plan (read back at position 107) ·
+record-supersession (live in the SANDBOX workspace per the precedent of exploration 101bb301;
+SUPERSEDED_BY edge confirmed, actor stamped clientId=flmnt-cli) · proxy (binds, authenticated:true
+against mcp.production) · completion bash/zsh/fish/powershell + dynamic __complete offering corpus
+and its flags · guards on record-supersession and record-plan refuse with exit 1.
 
-THE PROOF THAT NOTHING IS LOST: 98 sections + 29 appendix entries = 127, which is exactly the
-doctrine the stream holds (99 decision.made + 32 decision.superseded − 4 DOC-NODE). That equality
-is a test, not an observation — TestEveryDoctrineEntryRendersExactlyOnce.
+NOT RUN, deliberately: `login` and `logout` would revoke or re-mint the credentials this session is
+using. Registration and flags verified; the live paths are exercised implicitly — every command above
+authenticated with the token login produced.
 
-THREE RULINGS THE FIRST DESIGN SILENTLY DROPPED, found by checking the count instead of reading
-the output:
-- Two entries are each superseded TWICE (deliberate amendments to different clauses of §5c and
-  §1d). A one-superseder-per-target map kept whichever came last and lost the other.
-- One supersession targets a KEYFRAME, so it belonged to no section and rendered nowhere — and it
-  was not even counted as unrendered, because supersessions were exempt from that count.
-Both fixed by rooting each entry in its own supersession lineage: a ruling whose target is not
-doctrine roots at itself, and branches render side by side in the original's position.
-
-ALSO FIXED HERE: the --project sweep test from 852f118 ENUMERATED four commands while its comment
-claimed to sweep. `corpus` proved the point by not being covered. It now sweeps cmd/*.go for
-`resolveProject(cmd` and fails on any file that resolves a project without registering the flag —
-verified by deleting corpus.go's flag registration and watching it fail by file name.
+## DONE

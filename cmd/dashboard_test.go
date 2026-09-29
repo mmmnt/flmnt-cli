@@ -6,18 +6,18 @@ import (
 	"github.com/mmmnt/flmnt-cli/internal/browser"
 )
 
-func TestDashboardResolvesEnvURL(t *testing.T) {
+func TestDashboardPrefersAnExplicitURL(t *testing.T) {
 	t.Setenv("QUORUM_DASHBOARD_URL", "http://custom.example.com")
-	url := browser.ResolveURL()
-	if url != "http://custom.example.com" {
-		t.Errorf("expected custom URL, got %s", url)
+
+	if url := browser.DashboardURL("https://mcp.production.flmnt.ai"); url != "http://custom.example.com" {
+		t.Errorf("an explicit override must win; got %s", url)
 	}
 }
 
-func TestDashboardFallsBackToDefault(t *testing.T) {
+func TestDashboardFallsBackToTheLocalStackWhenNothingSaysOtherwise(t *testing.T) {
 	t.Setenv("QUORUM_DASHBOARD_URL", "")
-	url := browser.ResolveURL()
-	if url != "http://localhost:3001" {
-		t.Errorf("expected default URL, got %s", url)
+
+	if url := browser.DashboardURL(""); url != "http://localhost:3001" {
+		t.Errorf("with no login to derive from, the local stack is the honest default; got %s", url)
 	}
 }
