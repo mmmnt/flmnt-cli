@@ -52,3 +52,22 @@ func TestASubordinateOpenerWithAQuestionMarkIsStillAnInquiry(t *testing.T) {
 		t.Errorf("Of(%q) = %q, want %q", "when did that land?", got, Inquiry)
 	}
 }
+
+/*
+The gate found these on its first run over real text, which is the whole argument for having it: 205
+captured prompts, and exactly two openers in the fall-through tail were verbs — "finish this list",
+"finish the lingering issues", "let me know if I can unblock you somehow", "let me know if you can't
+get out of the sandbox". Four directions filed as assertions because two words were absent from an
+enumerated list. `let's` was present and bare `let` was not.
+*/
+func TestTheOpenersTheGateFoundAreDirectives(t *testing.T) {
+	for _, s := range []string{
+		"finish this list.",
+		"finish the lingering issues, I want to get to a point where we can ship.",
+		"let me know if I can unblock you somehow.",
+	} {
+		if got := Of(s); got != Directive {
+			t.Errorf("Of(%q) = %q, want %q", s, got, Directive)
+		}
+	}
+}

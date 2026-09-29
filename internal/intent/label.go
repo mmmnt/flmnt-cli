@@ -27,9 +27,11 @@ var imperativeOpeners = map[string]bool{
 	"build": true, "bump": true, "check": true, "close": true, "commit": true, "confirm": true,
 	"connect": true, "continue": true, "create": true, "cut": true, "deactivate": true,
 	"delete": true, "deploy": true, "design": true, "do": true, "don't": true, "dont": true,
-	"drop": true, "ensure": true, "explain": true, "fix": true, "follow": true, "give": true,
-	"go": true, "guide": true, "handle": true, "hold": true, "ignore": true, "install": true,
-	"keep": true, "leave": true, "let's": true, "lets": true, "link": true, "list": true,
+	"drop": true, "ensure": true, "explain": true, "finish": true, "fix": true, "follow": true,
+	"give": true,
+	"go":   true, "guide": true, "handle": true, "hold": true, "ignore": true, "install": true,
+	"keep": true, "leave": true, "let": true, "let's": true, "lets": true, "link": true,
+	"list": true,
 	"make": true, "measure": true, "merge": true, "move": true, "open": true, "place": true,
 	"proceed": true, "pull": true, "push": true, "read": true, "record": true, "release": true,
 	"remove": true, "replace": true, "report": true, "revert": true, "run": true, "send": true,
@@ -69,7 +71,7 @@ func Of(s string) Label {
 	if strings.HasSuffix(t, "?") {
 		return Inquiry
 	}
-	word := firstWord.FindString(leadingMarker.ReplaceAllString(strings.ToLower(t), ""))
+	word := opener(s)
 	switch {
 	case imperativeOpeners[word]:
 		return Directive
@@ -80,4 +82,9 @@ func Of(s string) Label {
 	default:
 		return Assertion
 	}
+}
+
+// opener is a sentence's first word, lowercased, with any list marker stripped.
+func opener(s string) string {
+	return firstWord.FindString(leadingMarker.ReplaceAllString(strings.ToLower(strings.TrimSpace(s)), ""))
 }

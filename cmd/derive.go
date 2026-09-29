@@ -74,6 +74,7 @@ func runDerive(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(w, "SESSION\tKEYFRAME\tPROMPTS\tMISTAKES\tCOMMITS\tSUBA\tBRANCH")
 	var tKf, tPrm, tMis, tCom, tSub int
+	var promptTexts []string
 	for _, s := range sessions {
 		recs, perr := derive.ParseSession(s)
 		if perr != nil {
@@ -90,6 +91,11 @@ func runDerive(cmd *cobra.Command, args []string) error {
 			id, c[derive.KindKeyframe], c[derive.KindPrompt], c[derive.KindMistake], c[derive.KindCommit], subs, der.Branch)
 		tKf += c[derive.KindKeyframe]
 		tPrm += c[derive.KindPrompt]
+		for _, cand := range der.Candidates {
+			if cand.Kind == derive.KindPrompt {
+				promptTexts = append(promptTexts, cand.Text)
+			}
+		}
 		tMis += c[derive.KindMistake]
 		tCom += c[derive.KindCommit]
 		tSub += subs
@@ -105,6 +111,9 @@ func runDerive(cmd *cobra.Command, args []string) error {
 		tKf, tPrm, tMis, tCom, len(sessions), tSub)
 	if jsonl != nil {
 		fmt.Fprintf(out, "Wrote candidate JSONL → %s\n", outPath)
+	}
+	if report, _ := cmd.Flags().GetBool("intent"); report {
+		writeIntentReport(out, promptTexts)
 	}
 	return nil
 }
@@ -252,5 +261,6 @@ func init() {
 	deriveCmd.Flags().Bool("writer-dry-run", false, "With --write: print the import payload instead of sending it")
 	deriveCmd.Flags().Bool("hook", false, "Stop-hook mode: read the hook JSON from stdin and derive+import that one session (fails quiet)")
 	deriveCmd.Flags().Bool("force", false, "With --write backfill: re-derive sessions even if the cursor marks them processed")
+	deriveCmd.Flags().Bool("intent", false, "With the inventory: report how captured prompts classify, and which openers the imperative lexicon missed")
 	rootCmd.AddCommand(deriveCmd)
 }
