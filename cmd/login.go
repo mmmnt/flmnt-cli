@@ -120,7 +120,6 @@ func init() {
 	loginCmd.Flags().String("client-id", "", "OAuth2 client ID")
 	loginCmd.Flags().Bool("device", false, "Use the device-authorization grant (headless, no browser)")
 	loginCmd.Flags().String("device-url", "", "Device-authorization endpoint (with --device)")
-	loginCmd.Flags().Bool("local", false, "record the local login (email + this machine's marker) that a local flmnt mints credentials for")
-	loginCmd.Flags().String("email", "", "the person's email (with --local)")
+	loginCmd.Flags().Bool("local", false, "record the local login (derived from this machine and the OS user) that a local flmnt mints credentials for")
 	rootCmd.AddCommand(loginCmd)
 }

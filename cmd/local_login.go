@@ -9,27 +9,37 @@ import (
 
 var (
 	identityMarker = identity.Marker
+	identityOSUser = identity.OSUser
 	identitySave   = identity.Save
 	identityLoad   = identity.Load
+	identityRemove = identity.Remove
 )
 
-// runLocalLogin records the LOCAL LOGIN: the email the person declares plus the marker the host
-// machine already carries. The sub and every per-tool client id derive from those two, so a refused
-// login — no email, no readable marker — writes nothing; an identity is never invented.
+// runLocalLogin records the LOCAL LOGIN with no input: the marker the host machine already carries
+// and the OS user, digested to the sub a local flmnt mints for. Only the digest is written; a machine
+// with no readable marker is refused and an identity is never invented.
 func runLocalLogin(cmd *cobra.Command) error {
-	email, _ := cmd.Flags().GetString("email")
-	if email == "" {
-		return fmt.Errorf("--email is required with --local: the local login is the person it names")
-	}
 	marker, err := identityMarker()
 	if err != nil {
 		return fmt.Errorf("local login refused: %w", err)
 	}
-	id := identity.Identity{Email: email, Marker: marker}
+	osUser, err := identityOSUser()
+	if err != nil {
+		return fmt.Errorf("local login refused: %w", err)
+	}
+	id := identity.Derive(marker, osUser)
 	if err := identitySave(id); err != nil {
 		return fmt.Errorf("recording the local login: %w", err)
 	}
 	path, _ := identity.Path()
-	fmt.Fprintf(cmd.OutOrStdout(), "Local login recorded: %s on this machine (sub %s) → %s\n", email, id.Sub(), path)
+	fmt.Fprintf(cmd.OutOrStdout(), "Local login recorded: sub %s → %s\n", id.Sub, path)
+	return nil
+}
+
+func runLocalLogout(cmd *cobra.Command) error {
+	if err := identityRemove(); err != nil {
+		return fmt.Errorf("removing the local login: %w", err)
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "Local login removed.")
 	return nil
 }

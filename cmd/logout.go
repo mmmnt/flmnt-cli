@@ -12,6 +12,9 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Sign out and revoke local credentials",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if local, _ := cmd.Flags().GetBool("local"); local {
+			return runLocalLogout(cmd)
+		}
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		if serverURL == "" {
 			serverURL = envOr("QUORUM_SERVER_URL", "")
@@ -63,5 +66,6 @@ func init() {
 	logoutCmd.Flags().String("server-url", "", "flmnt server URL")
 	logoutCmd.Flags().String("revoke-url", "", "OAuth2 token-revocation endpoint")
 	logoutCmd.Flags().String("client-id", "", "OAuth2 client ID")
+	logoutCmd.Flags().Bool("local", false, "remove the local login instead")
 	rootCmd.AddCommand(logoutCmd)
 }
