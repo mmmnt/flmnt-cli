@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mmmnt/flmnt-cli/internal/auth"
 )
 
 /* RFC 4122 appendix vector for UUIDv5: the DNS namespace + "python.org". */
@@ -68,6 +70,19 @@ func TestSaveKeepsTheDigestNotTheMarker(t *testing.T) {
 	}
 	if filepath.Base(path) != "local-identity.json" {
 		t.Fatalf("path %s", path)
+	}
+}
+
+/* The identity lives beside config.json, never inside ~/.filament/keyring, which a logout removes whole. */
+func TestPathIsBesideTheConfigNotInsideTheKeyring(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	path, err := Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, _ := auth.ConfigDir()
+	if filepath.Dir(path) != dir || strings.Contains(path, "keyring") {
+		t.Fatalf("path %s must be directly under %s", path, dir)
 	}
 }
 

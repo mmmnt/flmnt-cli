@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/identity"
 	"github.com/spf13/pflag"
 )
 
@@ -39,32 +40,54 @@ func runLogout(t *testing.T, args ...string) (string, error) {
 }
 
 /*
-Logout clears everything. The config had been cleared by an earlier logout, so the next one resolved
-no server URL, deleted no token, and still said "Logged out." — whoami kept answering with the email
-from the production token left in the keychain. Now every token for every server goes, the local
-login goes, the config goes, and the line says so.
+Logout clears the session and every token. The config had been cleared by an earlier logout, so the
+next one resolved no server URL, deleted no token, and still said "Logged out." — whoami kept
+answering with the email from the production token left in the keychain. Now every token for every
+server goes, the config goes, and the line says so. The local IDENTITY stays: it is who this machine
+is, not a login, and the line says that too (founder ruling 2026-10-20: identity and session are
+separate).
 */
-func TestLogoutClearsEveryTokenTheLocalLoginAndTheSessionEvenWithNoConfig(t *testing.T) {
+func TestLogoutClearsEveryTokenAndTheSessionAndKeepsTheLocalIdentity(t *testing.T) {
 	stubLogoutSeams(t)
-	wiped, removed, cleared := false, false, false
+	t.Setenv("HOME", t.TempDir())
+	identityRemove = identity.Remove
+	if err := identity.Save(localMike); err != nil {
+		t.Fatal(err)
+	}
+	wiped, cleared := false, false
 	logoutDeleteAllTokens = func() ([]string, error) {
 		wiped = true
 		return []string{"https://mcp.production.flmnt.ai|access_token", "https://mcp.production.flmnt.ai|refresh_token", "https://mcp.staging.flmnt.dev|access_token"}, nil
 	}
-	identityRemove = func() error { removed = true; return nil }
 	logoutClearConfig = func() error { cleared = true; return nil }
 
 	stdout, err := runLogout(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !wiped || !removed || !cleared {
-		t.Fatalf("wiped %v removed %v cleared %v", wiped, removed, cleared)
+	if !wiped || !cleared {
+		t.Fatalf("wiped %v cleared %v", wiped, cleared)
 	}
-	for _, want := range []string{"Logged out.", "mcp.production.flmnt.ai", "mcp.staging.flmnt.dev", "Nothing remains"} {
+	if kept, err := identity.Load(); err != nil || kept.Sub != localMike.Sub {
+		t.Errorf("the local identity must survive a logout; got %+v %v", kept, err)
+	}
+	for _, want := range []string{"Logged out.", "mcp.production.flmnt.ai", "mcp.staging.flmnt.dev", "The local identity " + localMike.Sub + " stays"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("want %q in %q", want, stdout)
 		}
+	}
+	if strings.Contains(stdout, "Nothing remains") {
+		t.Errorf("the line must not claim nothing remains while the identity does: %q", stdout)
+	}
+}
+
+/* With no local identity on the machine, the line says nothing remains. */
+func TestLogoutLineSaysNothingRemainsOnlyWithoutAnIdentity(t *testing.T) {
+	stubLogoutSeams(t)
+	t.Setenv("HOME", t.TempDir())
+	stdout, err := runLogout(t)
+	if err != nil || !strings.Contains(stdout, "Nothing remains.") {
+		t.Fatalf("err %v stdout %q", err, stdout)
 	}
 }
 

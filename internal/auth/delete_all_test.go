@@ -57,6 +57,34 @@ func TestDeleteAllTokensClearsEveryServerAndTheFileKeyring(t *testing.T) {
 	}
 }
 
+/*
+The sweep is total for CREDENTIALS and touches nothing else under ~/.filament: the local identity
+file beside the config survives every logout (founder ruling 2026-10-20 — identity and session are
+separate; a keychain-resident identity will likewise live under its own service, never this one).
+*/
+func TestDeleteAllTokensLeavesTheLocalIdentityBesideTheConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	identityPath := filepath.Join(home, ".filament", "local-identity.json")
+	if err := os.MkdirAll(filepath.Dir(identityPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(identityPath, []byte(`{"sub":"local_x"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ring := fileRing(t)
+	if err := ring.Set(keyring.Item{Key: "https://mcp.production.flmnt.ai|access_token", Data: []byte("t")}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := DeleteAllTokens(); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(identityPath); err != nil || string(raw) != `{"sub":"local_x"}` {
+		t.Fatalf("the identity file must be untouched; got %q %v", raw, err)
+	}
+}
+
 func TestOriginsOfCollapsesFieldsAndLegacyBlobs(t *testing.T) {
 	got := OriginsOf([]string{
 		"https://a|access_token", "https://a|refresh_token", "https://a|id_token",

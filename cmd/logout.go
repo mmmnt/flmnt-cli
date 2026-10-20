@@ -18,11 +18,12 @@ var (
 
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
-	Short: "Sign out: clear the session, every stored token and the local login",
-	Long: "Ends the login and leaves nothing behind: the session config, every OAuth token the keychain\n" +
-		"holds for any server, the local login, and the encrypted file keyring of older builds are all\n" +
-		"removed, and the hosted refresh token is revoked when the login recorded a revocation endpoint.\n" +
-		"--local removes only the local login (and the session, when that was the login).",
+	Short: "Sign out: clear the session and every stored token; the local identity stays",
+	Long: "Ends the login: the session config, every OAuth token the keychain holds for any server, and\n" +
+		"the encrypted file keyring of older builds are all removed, and the hosted refresh token is revoked\n" +
+		"when the login recorded a revocation endpoint. The local identity (`flmnt login --local`'s derived\n" +
+		"sub) is who this machine is, not a login, and stays: the next `flmnt login --local` reuses it.\n" +
+		"--local ends only a local session.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if local, _ := cmd.Flags().GetBool("local"); local {
 			return runLocalLogout(cmd)
@@ -48,26 +49,29 @@ var logoutCmd = &cobra.Command{
 			}
 		}
 
-		// Then everything, whatever the config named or failed to name: a logout that cleared the
-		// config but left the token behind is how whoami kept answering with an old account.
+		// Then every token, whatever the config named or failed to name: a logout that cleared the
+		// config but left the token behind is how whoami kept answering with an old account. The local
+		// identity is not a credential and is not touched.
 		removed, err := logoutDeleteAllTokens()
 		if err != nil {
 			return fmt.Errorf("clearing keychain: %w", err)
-		}
-		if err := identityRemove(); err != nil {
-			return fmt.Errorf("removing the local login: %w", err)
 		}
 		if err := logoutClearConfig(); err != nil {
 			return fmt.Errorf("clearing config: %w", err)
 		}
 
-		fmt.Fprintln(cmd.OutOrStdout(), logoutLine(cfg, auth.OriginsOf(removed)))
+		identitySub := ""
+		if id, err := identityLoad(); err == nil {
+			identitySub = id.Sub
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), logoutLine(cfg, auth.OriginsOf(removed), identitySub))
 		return nil
 	},
 }
 
-// logoutLine says what was ended and what was cleared, so a person can see nothing is left.
-func logoutLine(cfg auth.CLIConfig, origins []string) string {
+// logoutLine says what was ended, what was cleared and what stays, so a person can see exactly what
+// is left: the local identity when the machine has one, nothing otherwise.
+func logoutLine(cfg auth.CLIConfig, origins []string, identitySub string) string {
 	line := "Logged out."
 	switch cfg.LoginKind() {
 	case auth.LoginLocal:
@@ -77,6 +81,9 @@ func logoutLine(cfg auth.CLIConfig, origins []string) string {
 	}
 	if len(origins) > 0 {
 		line += " Cleared tokens for " + joinComma(origins) + "."
+	}
+	if identitySub != "" {
+		return line + " The local identity " + identitySub + " stays; `flmnt login --local` reuses it."
 	}
 	return line + " Nothing remains."
 }
