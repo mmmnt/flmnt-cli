@@ -81,20 +81,24 @@ unchanged: credentials come from the keychain `flmnt login` filled.
 **Identity.** A local flmnt mints credentials for a declared person, never for a default:
 
 ```sh
-flmnt login --local --email you@example.com   # once per machine
+flmnt login --local                           # once per machine and OS user — no input
 flmnt whoami --json --client flmnt-cli        # what a local headers-helper asks
+flmnt logout --local                          # end the local login
 ```
 
-`login --local` records the email plus an identifying marker the machine already carries (macOS
-`IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) in `~/.filament/local-identity.json`
-(0600), and refuses without an email or a readable marker. From those two, deterministically:
-`sub = UUIDv5(c0a3f0d2-5b1e-4d7a-9c3e-2f6b8a1d4e70, marker + "\n" + email)` and
-`client_id = UUIDv5(sub, <tool name>)` — the same machine and email give the same sub forever, a tool
-name the same client id forever, and two people or two machines never collide. Nothing is reused from
-the hosted login. `whoami --json` prints one object `{"sub","email","username"?,"workspace","client_id"?}`:
-on a loopback server from the local login, elsewhere from the stored OAuth login (`client_id` is then
-the registered OAuth client); `username` is omitted when unknown and `client_id` only appears with
-`--client`. Not logged in (either kind): nothing on stdout, one reason line on stderr, exit 1.
+`login --local` reads an identifying marker the machine already carries (macOS `IOPlatformUUID`,
+Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user, and derives, deterministically:
+`sub = "local_" + UUIDv5(c0a3f0d2-5b1e-4d7a-9c3e-2f6b8a1d4e70, marker + "\n" + osUser)` and
+`client_id = "local_" + UUIDv5(sub's UUID, <tool name>)`. The same machine and user give the same sub
+forever, a tool name the same client id forever, and two people or two machines never collide; the
+`local_` prefix lets the hosted side recognise a local identity without a lookup. Only the digest is
+kept — `~/.filament/local-identity.json` (0600) holds `{sub, created_at}`, never the marker — and that
+file is what makes the login explicit. A machine with no readable marker is refused; nothing is
+generated at random and nothing is reused from the hosted login. `whoami --json` prints one object
+`{"sub","workspace","client_id"?}`: on a loopback server from the local login, elsewhere from the
+stored OAuth login (`client_id` is then the registered OAuth client); `client_id` only appears with
+`--client`. Not logged in (either kind): nothing on stdout, one reason line on stderr, exit 1. Plain
+`whoami` says `local identity <sub>` for the local login.
 
 **Credentials.** On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`,
 `workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper: the
@@ -133,8 +137,9 @@ flmnt <command> -h               # detailed help for a command
 
 # Authentication
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
-flmnt login --local --email <e>  # record the local login a local flmnt mints credentials for
+flmnt login --local              # record the local login (derived from this machine + OS user) a local flmnt mints for
 flmnt logout                     # sign out and revoke local credentials
+flmnt logout --local             # remove the local login
 flmnt whoami                     # show your identity and which workspace is in force here
 flmnt whoami --json [--client <tool>]   # the identity as JSON for a local headers-helper (exit 1 when not logged in)
 

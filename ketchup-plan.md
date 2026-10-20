@@ -15,16 +15,16 @@ What the CLI already had: `sync`'s local side runs a headers-helper (`runAuthHel
 went quiet. The helper path becomes the shared local-credential path; the keychain/OAuth path is
 untouched and stays first for a non-loopback server.
 
-Identity contract (founder-ruled, final, 2026-10-19 — replaces every earlier note): the CLI owns a
-LOCAL LOGIN and the quorum helper only consumes it. `flmnt login --local --email <email>` persists the
-email plus the host marker (macOS IOPlatformUUID / Linux machine-id / Windows MachineGuid) in
-~/.filament/local-identity.json (0600); refuses without either; never generates. Derivation:
-sub = UUIDv5(Namespace, marker + "\n" + email), client_id = UUIDv5(sub, tool) — unique, persistent,
-collision-free behind a shared proxy. `flmnt whoami --json [--client <tool>]` prints
-{sub,email,username?,workspace,client_id?}: loopback → local login, hosted → keychain; no login →
-stdout empty, one stderr line, exit 1. The CLI runs the helper with `--client flmnt-cli` appended (the
-helper asks `flmnt whoami --json --client flmnt-cli` itself); BROKER_CLIENT_ID is gone. Fail closed:
-a refusal from the helper or whoami is surfaced verbatim.
+Identity contract (founder-ruled, revised final + addendum, 2026-10-19 — replaces every earlier
+note): the CLI owns a LOCAL LOGIN and the quorum helper only consumes it. `flmnt login --local` takes
+no input: it reads the host marker (macOS IOPlatformUUID / Linux machine-id / Windows MachineGuid)
+and the OS user, derives sub = "local_" + UUIDv5(Namespace, marker + "\n" + osUser), prints it, and
+writes ~/.filament/local-identity.json (0600) holding {sub, created_at} — never the marker; refuses
+when no marker can be read. `flmnt logout --local` removes the file. client_id = "local_" +
+UUIDv5(sub, tool). `flmnt whoami --json [--client <tool>]` prints {sub,workspace,client_id?}:
+loopback → local login (absent → exit 1, "run flmnt login --local"), hosted → keychain (client_id =
+the registered OAuth client). Plain whoami says "local identity <sub>". The CLI runs the helper with
+`--client flmnt-cli` appended; no BROKER_CLIENT_ID. Fail closed; refusals surfaced verbatim.
 
 ## Bursts
 
@@ -42,8 +42,8 @@ a refusal from the helper or whoami is surfaced verbatim.
 - [x] Burst 12: `sync --local-workspace` defaults to the helper's X-Workspace-Id, then the old "quorum" [depends: 5,6]
 - [x] Burst 13: `health` on a loopback server reports the helper: the minted actor, or the helper's reason [depends: 3,7]
 - [x] Burst 14: README documents the local path beside the remote one [depends: 1-13,15,16]
-- [x] Burst 15: `internal/identity` — UUIDv5 derivation under a fixed namespace, the host marker readers, the persisted local login [depends: none]
-- [x] Burst 16: `login --local --email` records the local login; refuses without an email or a marker [depends: 15]
+- [x] Burst 15: `internal/identity` — local_-prefixed UUIDv5 derivation under a fixed namespace, the host marker readers, the digest-only login file [depends: none]
+- [x] Burst 16: `login --local` (no input) records the derived sub, `logout --local` removes it; refuses without a marker [depends: 15]
 - [x] Burst 17: the helper runs with `--client flmnt-cli` (BROKER_CLIENT_ID dropped) [depends: 5]
 
 ## Left open (founder decisions — not guessed)
