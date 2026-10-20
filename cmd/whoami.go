@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -13,8 +14,11 @@ import (
 var whoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show the active identity and workspace",
-	Long: "Shows who is signed in and which workspace is in force here. On a local server the identity\n" +
-		"is the one the checkout's headers-helper minted; elsewhere it is the stored login.",
+	Long: "Shows who is signed in and which workspace is in force here. On a local server (loopback)\n" +
+		"the identity is the local login (`flmnt login --local`); elsewhere it is the stored OAuth login.\n" +
+		"--json prints one object {sub,email,username?,workspace,client_id?} for a headers-helper that\n" +
+		"mints a local credential as that person; --client <tool> adds the client id derived for that\n" +
+		"tool. Not logged in: nothing on stdout, the reason on stderr, exit 1.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// The same resolution every other command uses, so standing in a configured repo is enough:
 		// whoami used to refuse with the server_url its own .quorum.json was declaring.
@@ -22,18 +26,32 @@ var whoamiCmd = &cobra.Command{
 		if serverURL == "" {
 			return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
 		}
+		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+			return runWhoamiJSON(cmd, serverURL)
+		}
 
-		token, err := identityToken(cmd, serverURL)
-		if err != nil {
-			if errors.Is(err, auth.ErrNotFound) {
-				fmt.Fprintln(cmd.OutOrStdout(), "Not logged in.")
+		var who string
+		if httpx.IsLoopback(serverURL) {
+			id, err := identityLoad()
+			if err != nil {
+				fmt.Fprintln(cmd.OutOrStdout(), "Not logged in locally (run `flmnt login --local --email <email>`).")
 				return nil
 			}
-			return err
-		}
-		claims, err := auth.DecodeUnverified(token)
-		if err != nil {
-			return fmt.Errorf("decoding token: %w", err)
+			who = id.Email
+		} else {
+			tokens, err := authHeaderLoadToken(serverURL)
+			if err != nil {
+				if errors.Is(err, auth.ErrNotFound) {
+					fmt.Fprintln(cmd.OutOrStdout(), "Not logged in.")
+					return nil
+				}
+				return err
+			}
+			claims, err := auth.DecodeUnverified(firstNonEmpty(tokens.IDToken, tokens.AccessToken))
+			if err != nil {
+				return fmt.Errorf("decoding token: %w", err)
+			}
+			who = identityOf(claims)
 		}
 
 		cfg, _ := authHeaderLoadConfig()
@@ -41,24 +59,55 @@ var whoamiCmd = &cobra.Command{
 		if pc, perr := setup.LoadProjectConfig(""); perr == nil {
 			pinned, pinnedName = pc.ProjectID, pc.ProjectName
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(identityOf(claims), cfg.ActiveWorkspaceName, pinned, pinnedName))
+		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(who, cfg.ActiveWorkspaceName, pinned, pinnedName))
 		return nil
 	},
 }
 
-// identityToken is the token whose claims say who the session is: the helper's bearer on a loopback
-// server (the harness mints it for the person logged in), else the stored login's id token.
-func identityToken(cmd *cobra.Command, serverURL string) (string, error) {
+// runWhoamiJSON is what a local headers-helper asks (`flmnt whoami --json --client <tool>`) to learn
+// who to mint for. A loopback server answers from the local login — derived sub, declared email, the
+// client id derived for the tool; a hosted server from the stored login and its registered OAuth
+// client. Nothing on stdout when there is no login of the kind asked for: the helper then blocks.
+func runWhoamiJSON(cmd *cobra.Command, serverURL string) error {
+	tool, _ := cmd.Flags().GetString("client")
+	cfg, _ := authHeaderLoadConfig()
+	out := map[string]string{}
 	if httpx.IsLoopback(serverURL) {
-		if h, err := localCredentials(cmd, ""); err == nil {
-			return h.Bearer, nil
+		id, err := identityLoad()
+		if err != nil {
+			return fmt.Errorf("whoami: %w", err)
+		}
+		out["sub"], out["email"] = id.Sub(), id.Email
+		if tool != "" {
+			out["client_id"] = id.ClientID(tool)
+		}
+	} else {
+		tokens, err := authHeaderLoadToken(serverURL)
+		if err != nil {
+			return fmt.Errorf("whoami: not logged in to %s (run `flmnt login`)", serverURL)
+		}
+		claims, err := auth.DecodeUnverified(firstNonEmpty(tokens.IDToken, tokens.AccessToken))
+		if err != nil {
+			return fmt.Errorf("whoami: decoding the stored token: %w", err)
+		}
+		out["sub"], out["email"] = claims.Sub, claims.Email
+		if claims.Username != "" {
+			out["username"] = claims.Username
+		}
+		if tool != "" {
+			out["client_id"] = firstNonEmpty(envOr("QUORUM_CLIENT_ID", ""), cfg.ClientID)
 		}
 	}
-	tokens, err := authHeaderLoadToken(serverURL)
-	if err != nil {
-		return "", err
+	out["workspace"] = cfg.ActiveWorkspaceID
+	if pc, perr := setup.LoadProjectConfig(""); perr == nil && pc.ProjectID != "" {
+		out["workspace"] = pc.ProjectID
 	}
-	return firstNonEmpty(tokens.IDToken, tokens.AccessToken), nil
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), string(raw))
+	return nil
 }
 
 func identityOf(claims auth.Claims) string {
@@ -67,6 +116,8 @@ func identityOf(claims auth.Claims) string {
 
 func init() {
 	whoamiCmd.Flags().String("server-url", "", "flmnt server URL")
+	whoamiCmd.Flags().Bool("json", false, "print the identity as one JSON object {sub,email,username?,workspace,client_id?}; exit 1 when not logged in")
+	whoamiCmd.Flags().String("client", "", "with --json: the tool whose client id to include (derived locally; the registered OAuth client when hosted)")
 	rootCmd.AddCommand(whoamiCmd)
 }
 
