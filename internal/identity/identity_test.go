@@ -5,9 +5,22 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/99designs/keyring"
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 )
+
+// memoryRing gives a test its own in-memory keyring and a fresh HOME, so nothing reaches the real keychain.
+func memoryRing(t *testing.T) keyring.Keyring {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	ring := keyring.NewArrayKeyring(nil)
+	orig := OpenRing
+	OpenRing = func() (keyring.Keyring, error) { return ring, nil }
+	t.Cleanup(func() { OpenRing = orig })
+	return ring
+}
 
 /* RFC 4122 appendix vector for UUIDv5: the DNS namespace + "python.org". */
 func TestUUID5MatchesTheRFCVector(t *testing.T) {
@@ -49,7 +62,7 @@ func TestSubAndClientIDAreDeterministicAndDistinct(t *testing.T) {
 
 /* Only the digest is kept: the file that makes the login explicit holds the sub and when, never the raw marker. */
 func TestSaveKeepsTheDigestNotTheMarker(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	memoryRing(t)
 	marker := "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
 	id := Derive(marker, "mike")
 
@@ -75,7 +88,7 @@ func TestSaveKeepsTheDigestNotTheMarker(t *testing.T) {
 
 /* The identity lives beside config.json, never inside ~/.filament/keyring, which a logout removes whole. */
 func TestPathIsBesideTheConfigNotInsideTheKeyring(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	memoryRing(t)
 	path, err := Path()
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +100,7 @@ func TestPathIsBesideTheConfigNotInsideTheKeyring(t *testing.T) {
 }
 
 func TestLoadReportsNoLocalLogin(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	memoryRing(t)
 	if _, err := Load(); err != ErrNotFound {
 		t.Fatalf("err %v, want ErrNotFound", err)
 	}
@@ -111,5 +124,82 @@ func TestMarkerParsers(t *testing.T) {
 	}
 	if parseIORegUUID("nothing here") != "" || parseRegQuery("nothing here") != "" {
 		t.Error("absent markers must read as empty, never invented")
+	}
+}
+
+/*
+The identity lives in the OS keychain under its own service (QRM-ADR-016 §5f–§5g): Save writes it
+
+	there and caches it in the file; Load reads the keychain, so a deleted file changes nothing; an
+	identity an older build left only in the file is moved into the keychain on first read.
+*/
+func TestIdentityLivesInItsKeyringAndTheFileIsACache(t *testing.T) {
+	ring := memoryRing(t)
+	id := DeriveSalted("ABB0B3CF-5122-5F8A-835B-A01323C6EDCD", "mike", "0123456789abcdef0123456789abcdef")
+	if err := Save(id); err != nil {
+		t.Fatal(err)
+	}
+	item, err := ring.Get("identity")
+	if err != nil || !strings.Contains(string(item.Data), id.Sub) || !strings.Contains(string(item.Data), id.Salt) {
+		t.Fatalf("the keychain holds the identity with its salt: %v %s", err, item.Data)
+	}
+	path, _ := Path()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load()
+	if err != nil || got.Sub != id.Sub || got.Salt != id.Salt {
+		t.Fatalf("a deleted cache changes nothing: %+v %v", got, err)
+	}
+
+	older := memoryRing(t)
+	legacy := Derive("ABB0B3CF-5122-5F8A-835B-A01323C6EDCD", "mike")
+	cachePath, _ := Path()
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath, []byte(`{"sub":"`+legacy.Sub+`","created_at":"2026-10-20T16:49:09Z"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err = Load()
+	if err != nil || got.Sub != legacy.Sub || got.Salt != "" {
+		t.Fatalf("an older identity is read from its file as it is: %+v %v", got, err)
+	}
+	if item, err := older.Get("identity"); err != nil || !strings.Contains(string(item.Data), legacy.Sub) {
+		t.Fatalf("and moved into the keychain: %v", err)
+	}
+}
+
+/* A salted identity never collides: the same machine and user with another salt is another sub; the same salt is the same sub. */
+func TestSaltedDerivationIsUniquePerSaltAndStable(t *testing.T) {
+	marker := "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
+	a := DeriveSalted(marker, "mike", "aa")
+	if a.Sub != DeriveSalted(marker, "mike", "aa").Sub || a.Sub == DeriveSalted(marker, "mike", "bb").Sub || a.Sub == Derive(marker, "mike").Sub {
+		t.Fatal("the salt must change the sub, and only the salt")
+	}
+	if a.Sub != "local_"+uuid5(Namespace, marker+"\n"+"mike"+"\n"+"aa") {
+		t.Fatal("derivation must be exactly the documented one")
+	}
+	s1, s2 := NewSalt(), NewSalt()
+	if len(s1) != 32 || s1 == s2 {
+		t.Fatalf("salts are 16 random bytes in hex: %q %q", s1, s2)
+	}
+}
+
+/* A re-mint keeps the whole history, oldest first, with the lifetime of each sub it replaced. */
+func TestRemintRecordsEverySubTheMachineAnsweredAs(t *testing.T) {
+	marker := "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
+	first := Derive(marker, "mike")
+	first.CreatedAt = "2026-10-20T16:49:09Z"
+	second := Remint(first, marker, "mike", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))
+	third := Remint(second, marker, "mike", time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
+	if second.Sub == first.Sub || third.Sub == second.Sub || third.Salt == "" || third.Salt == second.Salt {
+		t.Fatal("each re-mint is a new salted sub")
+	}
+	if len(third.History) != 2 || third.History[0].Sub != first.Sub || third.History[0].ReplacedAt != "2026-10-21T09:00:00Z" || third.History[1].Sub != second.Sub || third.History[1].CreatedAt != "2026-10-21T09:00:00Z" {
+		t.Fatalf("history %+v", third.History)
+	}
+	if got := third.Formerly(); len(got) != 2 || got[0] != first.Sub || got[1] != second.Sub {
+		t.Fatalf("formerly %v", got)
 	}
 }
