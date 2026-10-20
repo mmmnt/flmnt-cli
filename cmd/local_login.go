@@ -97,6 +97,23 @@ func runLocalToken(cmd *cobra.Command, id identity.Identity, session auth.CLICon
 	if doc.DeviceAuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
 		return skip(fmt.Sprintf("%s advertises no device_authorization_endpoint/token_endpoint", serverURL))
 	}
+	if _, err := obtainLocalToken(id, serverURL, adminURL, doc); err != nil {
+		return err
+	}
+	session.AuthURL = doc.AuthorizationEndpoint
+	session.TokenURL = doc.TokenEndpoint
+	session.ClientID = cliTool
+	session.RevocationEndpoint = doc.RevocationEndpoint
+	_ = loginSaveConfig(session)
+	fmt.Fprintf(out, "Local token stored in %s for %s.\n", auth.StorageDescription(), serverURL)
+	return nil
+}
+
+// obtainLocalToken is the CLI's own harness credential, minted from the identity: the device grant as
+// `flmnt-cli`, self-approved over the loopback admin listener, stored under the server URL. A session
+// artifact (QRM-ADR-016 §5f): `login --local` mints it, and so does any command that finds none in the
+// keychain after a hosted login swept it — the identity is what persists, the token is re-obtained.
+func obtainLocalToken(id identity.Identity, serverURL, adminURL string, doc oauthDiscovery) (auth.TokenSet, error) {
 	tokens, err := loginRunDeviceFlow(auth.DeviceConfig{
 		DeviceURL: doc.DeviceAuthorizationEndpoint,
 		TokenURL:  doc.TokenEndpoint,
@@ -106,18 +123,12 @@ func runLocalToken(cmd *cobra.Command, id identity.Identity, session auth.CLICon
 		return localAdminApprove(adminURL, d.UserCode, id.Sub, id.ClientID(cliTool))
 	}, nil, nil)
 	if err != nil {
-		return fmt.Errorf("obtaining the local token: %w", err)
+		return auth.TokenSet{}, fmt.Errorf("obtaining the local token: %w", err)
 	}
 	if err := loginStoreToken(serverURL, tokens); err != nil {
-		return fmt.Errorf("storing token: %w", err)
+		return auth.TokenSet{}, fmt.Errorf("storing token: %w", err)
 	}
-	session.AuthURL = doc.AuthorizationEndpoint
-	session.TokenURL = doc.TokenEndpoint
-	session.ClientID = cliTool
-	session.RevocationEndpoint = doc.RevocationEndpoint
-	_ = loginSaveConfig(session)
-	fmt.Fprintf(out, "Local token stored in %s for %s.\n", auth.StorageDescription(), serverURL)
-	return nil
+	return tokens, nil
 }
 
 // localSession is the config a local login records. Nothing hosted carries over: no OAuth endpoints,

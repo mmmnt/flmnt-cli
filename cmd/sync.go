@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
+	"github.com/mmmnt/flmnt-cli/internal/localadmin"
 	"github.com/mmmnt/flmnt-cli/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -20,12 +25,17 @@ var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync your data between local and remote workspaces",
 	Long: "Move your data between local and remote workspaces. push sends local to remote; " +
-		"pull brings remote to local. Transfers are incremental and safe to re-run.",
+		"pull brings remote to local. Transfers are incremental and safe to re-run.\n" +
+		"A push converges your local identity on your cloud account (QRM-ADR-016): records you wrote\n" +
+		"locally are written to the cloud as the account you are logged in to; a teammate's stay theirs.\n" +
+		"A pull writes the cloud copy as it is; a record that differs in both places is shown as a diff\n" +
+		"and you decide, record by record (or --take local|cloud for all). A record you keep is\n" +
+		"replaced in the cloud by your next push.",
 }
 
 var syncPushCmd = &cobra.Command{
 	Use:           "push",
-	Short:         "Sync your local data up to the remote workspace",
+	Short:         "Sync your local data up to the remote workspace, as your cloud account",
 	SilenceUsage:  true,
 	SilenceErrors: false,
 	RunE:          func(cmd *cobra.Command, args []string) error { return runSync(cmd, true) },
@@ -33,7 +43,7 @@ var syncPushCmd = &cobra.Command{
 
 var syncPullCmd = &cobra.Command{
 	Use:           "pull",
-	Short:         "Sync data from the remote workspace down to local",
+	Short:         "Sync data from the remote workspace down to local, deciding every collision",
 	SilenceUsage:  true,
 	SilenceErrors: false,
 	RunE:          func(cmd *cobra.Command, args []string) error { return runSync(cmd, false) },
@@ -44,7 +54,7 @@ func runSync(cmd *cobra.Command, push bool) error {
 	if err != nil {
 		return fmt.Errorf("resolving local endpoint: %w", err)
 	}
-	remote, err := resolveRemoteEndpoint(cmd)
+	remote, hosted, err := resolveRemoteEndpoint(cmd)
 	if err != nil {
 		return fmt.Errorf("resolving remote endpoint: %w", err)
 	}
@@ -67,11 +77,119 @@ func runSync(cmd *cobra.Command, push bool) error {
 	if err != nil {
 		return fmt.Errorf("loading cursors: %w", err)
 	}
+	markPath, _ := cmd.Flags().GetString("marks-file")
+	if markPath == "" {
+		markPath, err = sync.DefaultMarkPath()
+		if err != nil {
+			return err
+		}
+	}
+	marks, err := sync.LoadMarks(markPath)
+	if err != nil {
+		return fmt.Errorf("loading marks: %w", err)
+	}
+
+	opts := sync.Options{Marks: marks}
+	out := cmd.OutOrStdout()
+	if push {
+		if id, err := identityLoad(); err == nil {
+			opts.LocalSubs = []string{id.Sub}
+			fmt.Fprintf(out, "Pushing as %s (%s) — records written locally as %s become the cloud account's.\n", identityOf(hosted), hosted.Sub, id.Sub)
+		}
+	} else {
+		take, _ := cmd.Flags().GetString("take")
+		resolver, err := collisionResolver(cmd, take)
+		if err != nil {
+			return err
+		}
+		opts.Resolve = resolver
+	}
 
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	fmt.Fprintf(cmd.OutOrStdout(), "Syncing %s (%s [%s] -> %s [%s])\n",
+	fmt.Fprintf(out, "Syncing %s (%s [%s] -> %s [%s])\n",
 		direction, from.Ref, from.Workspace, to.Ref, to.Workspace)
-	return sync.Run(from, to, cursors, dryRun, cmd.OutOrStdout())
+	return sync.RunWith(from, to, cursors, dryRun, out, opts)
+}
+
+// collisionResolver is how a pull decides (QRM-ADR-016 §2): --take local|cloud decides every collision
+// the same way; otherwise each collision is shown as a diff and the person answers l or c. An answer
+// that is neither, or no answer at all (no terminal), stops the pull before anything is written.
+func collisionResolver(cmd *cobra.Command, take string) (sync.Resolver, error) {
+	switch take {
+	case "local", "cloud":
+		return func(cs []sync.Collision) ([]sync.Resolution, error) {
+			out := make([]sync.Resolution, 0, len(cs))
+			for _, c := range cs {
+				out = append(out, sync.Resolution{CorrelationID: c.CorrelationID, Take: takeOf(take)})
+			}
+			return out, nil
+		}, nil
+	case "":
+		return func(cs []sync.Collision) ([]sync.Resolution, error) {
+			reader := bufio.NewReader(cmd.InOrStdin())
+			w := cmd.OutOrStdout()
+			out := make([]sync.Resolution, 0, len(cs))
+			for i, c := range cs {
+				fmt.Fprintf(w, "\n[%d/%d] %s / %s\n%s", i+1, len(cs), c.StreamSuffix, c.CorrelationID, renderDiff(c))
+				fmt.Fprint(w, "Keep the (l)ocal copy or take the (c)loud copy? [l/c] ")
+				line, _ := reader.ReadString('\n')
+				fmt.Fprintln(w)
+				switch strings.ToLower(strings.TrimSpace(line)) {
+				case "l", "local":
+					out = append(out, sync.Resolution{CorrelationID: c.CorrelationID, Take: "EXISTING"})
+				case "c", "cloud":
+					out = append(out, sync.Resolution{CorrelationID: c.CorrelationID, Take: "INCOMING"})
+				default:
+					return nil, fmt.Errorf("every collision needs a decision; answer l or c, or pass --take local|cloud (nothing was written)")
+				}
+			}
+			return out, nil
+		}, nil
+	default:
+		return nil, fmt.Errorf("--take must be local or cloud, got %q", take)
+	}
+}
+
+func takeOf(take string) string {
+	if take == "local" {
+		return "EXISTING"
+	}
+	return "INCOMING"
+}
+
+// renderDiff names each top-level field of the envelope that differs, local value then cloud value,
+// as compact JSON. The envelopes arrive as the server serialized them.
+func renderDiff(c sync.Collision) string {
+	var local, cloud map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(c.Existing), &local)
+	_ = json.Unmarshal([]byte(c.Incoming), &cloud)
+	keys := map[string]bool{}
+	for k := range local {
+		keys[k] = true
+	}
+	for k := range cloud {
+		keys[k] = true
+	}
+	names := make([]string, 0, len(keys))
+	for k := range keys {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, k := range names {
+		if string(local[k]) == string(cloud[k]) {
+			continue
+		}
+		fmt.Fprintf(&b, "  %s\n    local: %s\n    cloud: %s\n", k, valueOrAbsent(local[k]), valueOrAbsent(cloud[k]))
+	}
+	return b.String()
+}
+
+func valueOrAbsent(v json.RawMessage) string {
+	if len(v) == 0 {
+		return "(absent)"
+	}
+	return string(v)
 }
 
 // resolveRemoteServerURL is the hosted MCP URL: --remote-url first, then the chain every other
@@ -86,27 +204,27 @@ func resolveRemoteServerURL(cmd *cobra.Command) string {
 }
 
 // resolveRemoteEndpoint resolves the OAuth-authenticated remote side from the active login,
-// refreshing the access token the same way `mcp auth-header` does.
-func resolveRemoteEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
+// refreshing the access token the same way `mcp auth-header` does, and says who the token is.
+func resolveRemoteEndpoint(cmd *cobra.Command) (sync.Endpoint, auth.Claims, error) {
 	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
-		return sync.Endpoint{}, fmt.Errorf("no remote server URL (run `flmnt login` or pass --remote-url)")
+		return sync.Endpoint{}, auth.Claims{}, fmt.Errorf("no remote server URL (run `flmnt login` or pass --remote-url)")
 	}
 	tokenURL, clientID, err := resolveOAuthEndpoint(cmd, serverURL)
 	if err != nil {
-		return sync.Endpoint{}, err
+		return sync.Endpoint{}, auth.Claims{}, err
 	}
 	tokens, err := authHeaderLoadToken(serverURL)
 	if err != nil {
-		return sync.Endpoint{}, fmt.Errorf("not logged in to %s (run `flmnt login`): %w", serverURL, err)
+		return sync.Endpoint{}, auth.Claims{}, fmt.Errorf("not logged in to %s (run `flmnt login`): %w", serverURL, err)
 	}
 	fresh, refreshed, err := auth.EnsureFreshAccessToken(tokens, tokenURL, clientID, accessTokenRefreshThreshold, time.Now())
 	if err != nil {
-		return sync.Endpoint{}, err
+		return sync.Endpoint{}, auth.Claims{}, err
 	}
 	if refreshed {
 		if err := authHeaderStoreToken(serverURL, fresh); err != nil {
-			return sync.Endpoint{}, fmt.Errorf("storing refreshed token: %w", err)
+			return sync.Endpoint{}, auth.Claims{}, fmt.Errorf("storing refreshed token: %w", err)
 		}
 	}
 
@@ -115,18 +233,21 @@ func resolveRemoteEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 		workspace = v
 	}
 	if workspace == "" {
-		return sync.Endpoint{}, fmt.Errorf("no remote workspace (run `flmnt workspace use` or pass --remote-workspace)")
+		return sync.Endpoint{}, auth.Claims{}, fmt.Errorf("no remote workspace (run `flmnt workspace use` or pass --remote-workspace)")
 	}
 	endpoint := resolveGraphQLEndpointFor(cmd, serverURL)
 	if endpoint == "" {
-		return sync.Endpoint{}, fmt.Errorf("no remote GraphQL endpoint for %s", serverURL)
+		return sync.Endpoint{}, auth.Claims{}, fmt.Errorf("no remote GraphQL endpoint for %s", serverURL)
 	}
-	return sync.Endpoint{GQL: apiclient.New(endpoint, fresh.AccessToken), Workspace: workspace, Ref: serverURL}, nil
+	claims, _ := auth.DecodeUnverified(firstNonEmpty(fresh.IDToken, fresh.AccessToken))
+	return sync.Endpoint{GQL: apiclient.New(endpoint, fresh.AccessToken), Workspace: workspace, Ref: serverURL}, claims, nil
 }
 
 // resolveLocalEndpoint resolves the local MCP side. Its bearer is the keychain token `flmnt login
-// --local` stored under the local server URL, read and refreshed exactly as the remote side's is; a
-// local server with no stored token is refused with the login that fills it, never substituted.
+// --local` stored under the local server URL, read and refreshed exactly as the remote side's is.
+// When the keychain holds none — a hosted login sweeps every token (one login at a time) — and this
+// machine holds its local identity, the token is minted again from the identity on the spot
+// (QRM-ADR-016 §5f); a machine with no identity is refused with the login that records one.
 func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	url, _ := cmd.Flags().GetString("local-url")
 	if url == "" {
@@ -134,7 +255,11 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	}
 	bearer := bestEffortBearer(cmd, url)
 	if bearer == "" {
-		return sync.Endpoint{}, loginRequired(url)
+		minted, err := mintLocalBearer(cmd, url)
+		if err != nil {
+			return sync.Endpoint{}, err
+		}
+		bearer = minted
 	}
 	workspace, _ := cmd.Flags().GetString("local-workspace")
 	endpoint := resolveGraphQLEndpointFor(cmd, url)
@@ -142,6 +267,30 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 		return sync.Endpoint{}, fmt.Errorf("no local GraphQL endpoint for %s", url)
 	}
 	return sync.Endpoint{GQL: apiclient.New(endpoint, strings.TrimPrefix(bearer, "Bearer ")), Workspace: workspace, Ref: url}, nil
+}
+
+func mintLocalBearer(cmd *cobra.Command, url string) (string, error) {
+	if !httpx.IsLoopback(url) {
+		return "", loginRequired(url)
+	}
+	id, err := identityLoad()
+	if err != nil {
+		return "", loginRequired(url)
+	}
+	doc, err := loginDiscover(url)
+	if err != nil {
+		return "", fmt.Errorf("no stored token for %s and its OAuth discovery failed: %w", url, err)
+	}
+	if doc.DeviceAuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
+		return "", loginRequired(url)
+	}
+	adminURL, _ := cmd.Flags().GetString("admin-url")
+	tokens, err := obtainLocalToken(id, url, adminURL, doc)
+	if err != nil {
+		return "", err
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Local token minted for %s (%s).\n", id.Sub, url)
+	return "Bearer " + tokens.AccessToken, nil
 }
 
 func init() {
@@ -153,7 +302,10 @@ func init() {
 		c.Flags().String("local-url", defaultLocalURL, "Local MCP server URL")
 		c.Flags().String("local-workspace", defaultLocalWorkspace, "Local workspace id")
 		c.Flags().String("cursor-file", "", "Path to the sync cursor file (default: ~/.filament/sync-cursors.json)")
+		c.Flags().String("marks-file", "", "Path to the file of records kept as local truth (default: ~/.filament/sync-marks.json)")
+		c.Flags().String("admin-url", localadmin.DefaultBaseURL, "the local broker's admin listener, for minting the local token when the keychain holds none")
 	}
+	syncPullCmd.Flags().String("take", "", "decide every collision the same way: local keeps your copy, cloud takes the cloud copy")
 	syncCmd.AddCommand(syncPushCmd)
 	syncCmd.AddCommand(syncPullCmd)
 	rootCmd.AddCommand(syncCmd)
