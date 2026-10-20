@@ -81,7 +81,8 @@ unchanged: credentials come from the keychain `flmnt login` filled.
 **Identity.** A local flmnt mints credentials for a declared person, never for a default:
 
 ```sh
-flmnt login --local                           # once per machine and OS user — no input
+flmnt login --local                           # once per machine and OS user — no input; also obtains the CLI's own local token
+flmnt local approve <code>                    # approve a client's pending sign-in (claude.ai, Claude Code) for the local login
 flmnt whoami --json --client flmnt-cli        # what a local headers-helper asks
 flmnt logout --local                          # end the local login
 ```
@@ -99,6 +100,26 @@ generated at random and nothing is reused from the hosted login. `whoami --json`
 stored OAuth login (`client_id` is then the registered OAuth client); `client_id` only appears with
 `--client`. Not logged in (either kind): nothing on stdout, one reason line on stderr, exit 1. Plain
 `whoami` says `local identity <sub>` for the local login.
+
+**Signing a client in.** The local harness runs the real OAuth broker. A client that signs in to it
+(claude.ai, Claude Code) is shown a code such as `BCDF-GHJK` and the command
+`flmnt local approve BCDF-GHJK`. The command asks the broker's admin listener — a loopback-only port
+(default `http://127.0.0.1:4012`, `--admin-url`) the edge never routes, so reaching it is the proof
+that this is the machine — what the code is waiting for, shows it (`Approve Claude
+(https://claude.ai/api/mcp/auth_callback) for sub local_…? [y/N]`; `--yes` answers), and approves it
+for the local login: the sub, and the client id derived for the client's registered name (its client
+id when it has no name), so that client's writes are attributed to it. A device code (the CLI's own
+sign-in) is approved for the client id derived for `flmnt-cli`. No local login refuses before anything
+is asked; the broker's refusals (`LOCAL_APPROVAL_UNKNOWN`, `LOCAL_APPROVAL_EXPIRED`,
+`LOCAL_APPROVAL_ALREADY_APPROVED`, `LOCAL_SUB_INVALID`, `LOCAL_CLIENT_INVALID`,
+`LOCAL_ADMIN_NOT_LOOPBACK`) are surfaced verbatim.
+
+`flmnt login --local` also obtains the CLI's own harness token once the login is recorded: when the
+resolved server (`--server-url` / `QUORUM_SERVER_URL` / `.quorum.json` / the login config) is a
+loopback server whose OAuth discovery advertises a device grant, the CLI runs the device grant as
+`flmnt-cli` and approves its own user code over the admin listener — nobody is sent to a browser —
+then stores the token under the server URL as any login does. Otherwise the login is recorded as
+before and the token step says it was skipped and why.
 
 **Credentials.** On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`,
 `workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper: the
@@ -140,11 +161,15 @@ flmnt <command> -h               # detailed help for a command
 
 # Authentication
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
-flmnt login --local              # record the local login (derived from this machine + OS user) a local flmnt mints for
+flmnt login --local              # record the local login (derived from this machine + OS user) a local flmnt mints for,
+                                 # and obtain the CLI's own token from a local server (--admin-url, default http://127.0.0.1:4012)
 flmnt logout                     # sign out and revoke local credentials
 flmnt logout --local             # remove the local login
 flmnt whoami                     # show your identity and which workspace is in force here
 flmnt whoami --json [--client <tool>]   # the identity as JSON for a local headers-helper (exit 1 when not logged in)
+
+# Local harness
+flmnt local approve <code> [--yes] [--admin-url <url>]   # approve a client's pending sign-in on the local broker for the local login
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
