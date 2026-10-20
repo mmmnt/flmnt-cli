@@ -15,20 +15,16 @@ What the CLI already had: `sync`'s local side runs a headers-helper (`runAuthHel
 went quiet. The helper path becomes the shared local-credential path; the keychain/OAuth path is
 untouched and stays first for a non-loopback server.
 
-Actor ruling (founder, 2026-10-19): the harness mints as a declared person — no synthetic fallback;
-minting BLOCKS when the identity is not declared. The helper (scripts/mcp-auth-header.sh →
-scripts/local/mint-token.ts) mints for the client it is given — `--client <id>` as an argument
-(Claude Code's .mcp.json entry declares `--client claude-code-local`), else BROKER_CLIENT_ID — and
-refuses with a reason when either is undeclared: that is "not configured", the stderr line is
-surfaced, and no default is ever substituted.
-
-HELD (coordinator, later the same day): the founder revised the identity contract. A fixed client id
-and a reused hosted sub are out — both must be unique and persistent, and nobody can be assumed to
-have a sub already. The replacement is a LOCAL LOGIN in the CLI (a declared email plus a host-machine
-marker, persisted; a unique sub and per-tool client ids derive from it); the exact contract is to
-follow. Consequences in this repo: `whoami --json` (built against the keychain id token, commit
-3bb5a7a) was taken back out; the CLI still runs the helper with BROKER_CLIENT_ID=flmnt-cli because
-that is what the helper requires TODAY — provisional, to be replaced by the derived client id.
+Identity contract (founder-ruled, final, 2026-10-19 — replaces every earlier note): the CLI owns a
+LOCAL LOGIN and the quorum helper only consumes it. `flmnt login --local --email <email>` persists the
+email plus the host marker (macOS IOPlatformUUID / Linux machine-id / Windows MachineGuid) in
+~/.filament/local-identity.json (0600); refuses without either; never generates. Derivation:
+sub = UUIDv5(Namespace, marker + "\n" + email), client_id = UUIDv5(sub, tool) — unique, persistent,
+collision-free behind a shared proxy. `flmnt whoami --json [--client <tool>]` prints
+{sub,email,username?,workspace,client_id?}: loopback → local login, hosted → keychain; no login →
+stdout empty, one stderr line, exit 1. The CLI runs the helper with `--client flmnt-cli` appended (the
+helper asks `flmnt whoami --json --client flmnt-cli` itself); BROKER_CLIENT_ID is gone. Fail closed:
+a refusal from the helper or whoami is surfaced verbatim.
 
 ## Bursts
 
@@ -40,12 +36,15 @@ that is what the helper requires TODAY — provisional, to be replaced by the de
 - [x] Burst 6: the helper command resolves flag → `.mcp.json` headersHelper → the project-gated default [depends: 1]
 - [x] Burst 7: `bestEffortBearer` tries the helper first on a loopback server and second elsewhere; `--auth-cmd` is a root persistent flag; helper output is memoized per command [depends: 2,5,6]
 - [x] Burst 8: `workspace` commands authenticate through the same bearer path [depends: 7]
-- [~] Burst 9: `whoami --json` — built, then REMOVED on the hold above; the local login replaces it [depends: the local-login contract]
+- [x] Burst 9: `whoami --json [--client <tool>]` — local login on a loopback server, stored login elsewhere; built once against the keychain, removed on the hold, rebuilt on the final contract [depends: 15]
 - [x] Burst 10: `whoami` on a loopback server decodes the helper's bearer instead of saying "Not logged in." [depends: 7]
 - [x] Burst 11: on a loopback server the helper's workspace beats the machine-wide active workspace as the project fallback [depends: 7]
 - [x] Burst 12: `sync --local-workspace` defaults to the helper's X-Workspace-Id, then the old "quorum" [depends: 5,6]
 - [x] Burst 13: `health` on a loopback server reports the helper: the minted actor, or the helper's reason [depends: 3,7]
-- [x] Burst 14: README documents the local path beside the remote one [depends: 1-13]
+- [x] Burst 14: README documents the local path beside the remote one [depends: 1-13,15,16]
+- [x] Burst 15: `internal/identity` — UUIDv5 derivation under a fixed namespace, the host marker readers, the persisted local login [depends: none]
+- [x] Burst 16: `login --local --email` records the local login; refuses without an email or a marker [depends: 15]
+- [x] Burst 17: the helper runs with `--client flmnt-cli` (BROKER_CLIENT_ID dropped) [depends: 5]
 
 ## Left open (founder decisions — not guessed)
 
@@ -55,9 +54,9 @@ that is what the helper requires TODAY — provisional, to be replaced by the de
   compose publishes `127.0.0.1:4000` or the MCP proxies `/graphql`; that is a quorum-side change.
 - `setup --server-url <hosted>` inside a checkout whose `flmnt` entry is loopback + headersHelper keeps
   that entry and says so. There is no flag to force the overwrite ("unless asked" is undefined).
-- The local-login contract (identity + derived client ids). Until it lands the CLI mints through the
-  helper as BROKER_CLIENT_ID=flmnt-cli, and the entry's `--client` argument is dropped when the CLI
-  runs the checkout's helper (`withoutClientArg`) — the CLI parses that one argument of the helper's.
-- The helper's authoritative client declaration: today the `--client` ARGUMENT beats the environment,
-  which is why the CLI strips it. If the founder would rather the environment win for the CLI, the
-  strip goes.
+- The CLI drops the `.mcp.json` entry's own `--client <tool>` before appending `--client flmnt-cli`
+  (`withoutClientArg`): the CLI parses that one argument of the helper's. If the helper is instead
+  defined to take the LAST `--client`, the strip can go.
+- `whoami --json` on a hosted server with `--client` prints the registered OAuth client id
+  (QUORUM_CLIENT_ID / config client_id), not a derived one — per the contract; flagged in case the
+  founder wants the derived form on both sides.

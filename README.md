@@ -71,29 +71,47 @@ flmnt MCP without you handling tokens by hand. `setup` is idempotent.
 `flmnt workspace use <name|id>` sets the ACTIVE workspace, which is a per-machine convenience
 for ad-hoc commands — it does not decide where a configured repo records.
 
-### Local harness (no `flmnt login` needed)
+### Local flmnt (the compose harness)
 
 A checkout can run against a local flmnt instead of the hosted one. The CLI tells the two apart by
 the server URL it resolves (`--server-url` / `QUORUM_SERVER_URL` / `.quorum.json` / the login config):
-a loopback host — `http://localhost:8000/mcp` — is local, anything else is hosted.
+a loopback host — `http://localhost:8000/mcp` — is local, anything else is hosted. The hosted path is
+unchanged: credentials come from the keychain `flmnt login` filled.
 
-- **Hosted**: credentials come from the keychain `flmnt login` filled, exactly as above.
-- **Local**: credentials come from the checkout's own headers-helper — the `headersHelper` on the
-  `flmnt` entry in `.mcp.json`, the same command Claude Code runs for that server. The CLI runs it
-  with `BROKER_CLIENT_ID=flmnt-cli` in its environment, so what it writes is attributed to the CLI
-  (the entry's own `--client <id>` argument is Claude Code's declaration and is not passed along).
-  The helper prints `{"Authorization":"Bearer …","X-Workspace-Id":"…"}`; the workspace is the
-  session's project when the repo has no pin, and `sync`'s `--local-workspace` default. A helper that
-  refuses (nobody logged in, no client named) is "not configured": nothing is substituted, and
-  `flmnt health` shows its reason.
-- `--auth-cmd <command>` (any command) names a helper explicitly and is run verbatim; without one
-  and without a `.mcp.json` entry, the repo-relative `bash scripts/mcp-auth-header.sh` runs only inside
-  a configured repo (a `.quorum.json`).
-- A local server has no OAuth discovery, so point `FILAMENT_GRAPHQL_ENDPOINT` (or
-  `--graphql-endpoint`) at its router when the GraphQL endpoint is not advertised.
+**Identity.** A local flmnt mints credentials for a declared person, never for a default:
 
-`brief`, `gate`, `derive`, `record-*`, `whoami`, `workspace` and `sync`'s local side all take this path.
-`flmnt setup` leaves a loopback `flmnt` entry that carries a `headersHelper` as it is.
+```sh
+flmnt login --local --email you@example.com   # once per machine
+flmnt whoami --json --client flmnt-cli        # what a local headers-helper asks
+```
+
+`login --local` records the email plus an identifying marker the machine already carries (macOS
+`IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) in `~/.filament/local-identity.json`
+(0600), and refuses without an email or a readable marker. From those two, deterministically:
+`sub = UUIDv5(c0a3f0d2-5b1e-4d7a-9c3e-2f6b8a1d4e70, marker + "\n" + email)` and
+`client_id = UUIDv5(sub, <tool name>)` — the same machine and email give the same sub forever, a tool
+name the same client id forever, and two people or two machines never collide. Nothing is reused from
+the hosted login. `whoami --json` prints one object `{"sub","email","username"?,"workspace","client_id"?}`:
+on a loopback server from the local login, elsewhere from the stored OAuth login (`client_id` is then
+the registered OAuth client); `username` is omitted when unknown and `client_id` only appears with
+`--client`. Not logged in (either kind): nothing on stdout, one reason line on stderr, exit 1.
+
+**Credentials.** On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`,
+`workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper: the
+`headersHelper` on the `flmnt` entry in `.mcp.json`, the same command Claude Code runs for that
+server. The CLI runs it with `--client flmnt-cli` appended (the entry's own `--client <tool>` is Claude
+Code's declaration and is dropped), so the helper mints for the client id derived for the CLI and its
+writes are attributed to it. The helper prints `{"Authorization":"Bearer …","X-Workspace-Id":"…"}`;
+the workspace is the session's project when the repo has no pin, and `sync`'s `--local-workspace`
+default. A helper that refuses is "not configured": its reason is surfaced verbatim, nothing is
+substituted, and `flmnt health` shows it. `--auth-cmd <command>` names a helper explicitly; without
+one and without a `.mcp.json` entry, the repo-relative `bash scripts/mcp-auth-header.sh` runs only
+inside a configured repo (a `.quorum.json`). On a hosted server the helper is consulted only when no
+login is stored.
+
+A local server has no OAuth discovery, so point `FILAMENT_GRAPHQL_ENDPOINT` (or `--graphql-endpoint`)
+at its router when the GraphQL endpoint is not advertised. `flmnt setup` leaves a loopback `flmnt`
+entry that carries a `headersHelper` as it is.
 
 ### Which workspace a command uses
 
@@ -115,8 +133,10 @@ flmnt <command> -h               # detailed help for a command
 
 # Authentication
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
+flmnt login --local --email <e>  # record the local login a local flmnt mints credentials for
 flmnt logout                     # sign out and revoke local credentials
 flmnt whoami                     # show your identity and which workspace is in force here
+flmnt whoami --json [--client <tool>]   # the identity as JSON for a local headers-helper (exit 1 when not logged in)
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
