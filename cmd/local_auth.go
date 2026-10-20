@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
-	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/spf13/cobra"
 )
 
@@ -89,29 +88,12 @@ func localCredentials(cmd *cobra.Command, dir string) (helperHeaders, error) {
 	return run.headers, run.err
 }
 
-// bestEffortBearer returns "Bearer <token>" for serverURL, or "" when no credential answers. For a
-// loopback server the checkout's headers-helper is the credential and is asked first, the keychain
-// second; for a hosted server the keychain `flmnt login` filled stays first and the helper is a
-// fallback. Nothing is ever substituted when neither answers.
+// bestEffortBearer returns "Bearer <token>" for serverURL, or "" when no credential answers. The
+// keychain is the one credential, a loopback server and a hosted one alike: `flmnt login --local`
+// stores the harness token under the local server URL exactly as `flmnt login` stores the hosted one.
+// Nothing is ever substituted when it holds none.
 func bestEffortBearer(cmd *cobra.Command, serverURL string) string {
-	keychain := func() string { return keychainBearer(cmd, serverURL) }
-	helper := func() string {
-		h, err := localCredentials(cmd, "")
-		if err != nil {
-			return ""
-		}
-		return "Bearer " + h.Bearer
-	}
-	sources := []func() string{keychain, helper}
-	if httpx.IsLoopback(serverURL) {
-		sources = []func() string{helper, keychain}
-	}
-	for _, source := range sources {
-		if bearer := source(); bearer != "" {
-			return bearer
-		}
-	}
-	return ""
+	return keychainBearer(cmd, serverURL)
 }
 
 // keychainBearer returns a fresh "Bearer <token>" if logged in to serverURL, else "". Mirrors how

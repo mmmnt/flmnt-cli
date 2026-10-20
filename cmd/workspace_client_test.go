@@ -9,12 +9,12 @@ import (
 )
 
 /*
-`flmnt workspace list` read the keychain and refused with "not logged in" against the harness, whose
+`flmnt workspace list` authenticates through the same bearer path as brief and derive: the keychain
 
-	credential the checkout's headers-helper mints. It authenticates through the same bearer path as
-	brief and derive now, so a loopback server lists its workspaces without `flmnt login`.
+	token stored under the server URL. For a loopback server that is the one `flmnt login --local`
+	stores, so the harness lists its workspaces with no helper in the way.
 */
-func TestWorkspaceClientAuthenticatesThroughTheHelperForALoopbackServer(t *testing.T) {
+func TestWorkspaceClientAuthenticatesFromTheKeychainForALoopbackServer(t *testing.T) {
 	var seen string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get("Authorization")
@@ -22,7 +22,8 @@ func TestWorkspaceClientAuthenticatesThroughTheHelperForALoopbackServer(t *testi
 	}))
 	defer srv.Close()
 	t.Setenv("FILAMENT_GRAPHQL_ENDPOINT", srv.URL)
-	stubKeychain(t, "", auth.ErrNotFound)
+	token := freshJWT(t, "local-login")
+	stubKeychain(t, token, nil)
 	stubHelper(t, helperPrinting(t, "HELPER-TOKEN"))
 	if err := workspaceListCmd.Flags().Set("server-url", "http://localhost:8000/mcp"); err != nil {
 		t.Fatal(err)
@@ -36,8 +37,8 @@ func TestWorkspaceClientAuthenticatesThroughTheHelperForALoopbackServer(t *testi
 	if _, err := myWorkspaces(client); err != nil {
 		t.Fatal(err)
 	}
-	if seen != "Bearer HELPER-TOKEN" {
-		t.Fatalf("the router saw %q, want the helper's bearer", seen)
+	if seen != "Bearer "+token {
+		t.Fatalf("the router saw %q, want the keychain token", seen)
 	}
 }
 

@@ -46,22 +46,25 @@ func helperPrinting(t *testing.T, bearer string) string {
 }
 
 /*
-brief, gate, derive, record-* and workspace authenticated from the keychain `flmnt login` filled and
+brief, gate, derive, record-* and workspace authenticated from the keychain `flmnt login` filled; on
 
-	from nowhere else, so against the harness — whose credential the checkout's headers-helper mints —
-	they ended unauthenticated and went quiet. The helper is the credential for a loopback server.
+	a loopback server the checkout's headers-helper was then asked first, and ran quorum's
+	scripts/mcp-auth-header.sh. That script is gone (QRM-ADR-015 §6): the harness credential is the
+	token `flmnt login --local` stores under the local server URL, read from the keychain like any
+	login's. A helper configured anywhere is never run.
 */
-func TestBestEffortBearerPrefersTheHelperForALoopbackServer(t *testing.T) {
-	stubKeychain(t, freshJWT(t, "hosted-login"), nil)
+func TestBestEffortBearerUsesTheKeychainForALoopbackServer(t *testing.T) {
+	token := freshJWT(t, "local-login")
+	stubKeychain(t, token, nil)
 	stubHelper(t, helperPrinting(t, "HELPER-TOKEN"))
 
-	if got := bestEffortBearer(briefCmd, "http://localhost:8000/mcp"); got != "Bearer HELPER-TOKEN" {
-		t.Fatalf("got %q, want the helper's bearer", got)
+	if got := bestEffortBearer(briefCmd, "http://localhost:8000/mcp"); got != "Bearer "+token {
+		t.Fatalf("got %q, want the keychain token", got)
 	}
 }
 
-/* The hosted path is untouched: a stored login is used first, exactly as before. */
-func TestBestEffortBearerKeepsTheKeychainFirstForAHostedServer(t *testing.T) {
+/* The hosted path is untouched: the stored login is the credential, exactly as before. */
+func TestBestEffortBearerUsesTheKeychainForAHostedServer(t *testing.T) {
 	token := freshJWT(t, "hosted-login")
 	stubKeychain(t, token, nil)
 	stubHelper(t, helperPrinting(t, "HELPER-TOKEN"))
@@ -71,23 +74,15 @@ func TestBestEffortBearerKeepsTheKeychainFirstForAHostedServer(t *testing.T) {
 	}
 }
 
-/* Without a stored login, a configured helper is still consulted for a hosted server. */
-func TestBestEffortBearerFallsBackToTheHelperForAHostedServerWithoutALogin(t *testing.T) {
+/* A server with no stored token gets nothing — never a helper's answer, never a default. */
+func TestBestEffortBearerIsEmptyWithoutAStoredToken(t *testing.T) {
 	stubKeychain(t, "", auth.ErrNotFound)
 	stubHelper(t, helperPrinting(t, "HELPER-TOKEN"))
 
-	if got := bestEffortBearer(briefCmd, "https://mcp.production.flmnt.ai/mcp"); got != "Bearer HELPER-TOKEN" {
-		t.Fatalf("got %q, want the helper's bearer", got)
-	}
-}
-
-/* A loopback server whose helper refuses falls back to the keychain, then to nothing — never a default. */
-func TestBestEffortBearerIsEmptyWhenNeitherSourceAnswers(t *testing.T) {
-	stubKeychain(t, "", auth.ErrNotFound)
-	stubHelper(t, helper(fmt.Sprintf(`echo 'no identity declared %s' >&2; exit 1`, t.TempDir())))
-
-	if got := bestEffortBearer(briefCmd, "http://localhost:8000/mcp"); got != "" {
-		t.Fatalf("got %q, want empty", got)
+	for _, server := range []string{"http://localhost:8000/mcp", "https://mcp.production.flmnt.ai/mcp"} {
+		if got := bestEffortBearer(briefCmd, server); got != "" {
+			t.Fatalf("%s: got %q, want empty", server, got)
+		}
 	}
 }
 
