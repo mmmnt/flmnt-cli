@@ -223,3 +223,38 @@ func TestLoginLocalSkipsTheTokenStepWithItsReason(t *testing.T) {
 		})
 	}
 }
+
+/*
+When the harness IS there but refuses the self-approval (the admin port not published, a sub the broker
+
+	does not accept), the login stands and the token step fails loudly with the broker's words — a
+	silent skip here would leave every CLI command unauthenticated with nothing to explain it.
+*/
+func TestLoginLocalFailsTheTokenStepWithTheBrokersRefusal(t *testing.T) {
+	saved := stubLocalLoginSeams(t)
+	admin := &adminFixture{approveStatus: 400, approveBody: `{"code":"LOCAL_SUB_INVALID","message":"sub is not local_ + a UUIDv5"}`}
+	loginDiscover = func(string) (oauthDiscovery, error) {
+		return oauthDiscovery{TokenEndpoint: "http://localhost:4010/token", DeviceAuthorizationEndpoint: "http://localhost:4010/device_authorization"}, nil
+	}
+	origRun, origStore := loginRunDeviceFlow, loginStoreToken
+	t.Cleanup(func() { loginRunDeviceFlow, loginStoreToken = origRun, origStore })
+	loginRunDeviceFlow = func(_ auth.DeviceConfig, prompt auth.DevicePrompter, _ func() time.Time, _ func(time.Duration)) (auth.TokenSet, error) {
+		if err := prompt(auth.DeviceAuthResponse{UserCode: "LMNP-QRST"}); err != nil {
+			return auth.TokenSet{}, err
+		}
+		return auth.TokenSet{AccessToken: "never"}, nil
+	}
+	stores := 0
+	loginStoreToken = func(string, auth.TokenSet) error { stores++; return nil }
+
+	stdout, err := runLogin(t, "--local", "--server-url", "http://localhost:8000/mcp", "--admin-url", admin.serve(t))
+	if err == nil || !strings.Contains(err.Error(), "LOCAL_SUB_INVALID: sub is not local_ + a UUIDv5") {
+		t.Fatalf("want the broker's refusal verbatim, got %v", err)
+	}
+	if saved.Sub == "" || !strings.Contains(stdout, saved.Sub) {
+		t.Fatalf("the login itself must stand: %+v %q", saved, stdout)
+	}
+	if stores != 0 {
+		t.Fatal("no token may be stored after a refused approval")
+	}
+}
