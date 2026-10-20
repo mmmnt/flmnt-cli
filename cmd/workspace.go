@@ -6,7 +6,6 @@ import (
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/mmmnt/flmnt-cli/internal/auth"
-	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
 )
 
@@ -55,41 +54,23 @@ func resolveGraphQLEndpoint(flag, env, discovered, serverURL string) string {
 	return strings.TrimRight(serverURL, "/") + "/graphql"
 }
 
+// workspaceClient builds the authenticated router client for the workspace commands: the server the
+// session resolves to and the bearer every other command uses — the checkout's headers-helper for a
+// loopback server, the keychain `flmnt login` filled otherwise.
 func workspaceClient(cmd *cobra.Command) (*apiclient.Client, error) {
-	serverURL, _ := cmd.Flags().GetString("server-url")
-	if serverURL == "" {
-		serverURL = envOr("QUORUM_SERVER_URL", "")
-	}
-	if serverURL == "" {
-		if pc, err := setup.LoadProjectConfig(""); err == nil {
-			serverURL = pc.ServerURL
-		}
-	}
-	if serverURL == "" {
-		if cfg, err := auth.LoadConfig(); err == nil {
-			serverURL = cfg.ServerURL
-		}
-	}
-	flag, _ := cmd.Flags().GetString("graphql-endpoint")
-	env := envOr("FILAMENT_GRAPHQL_ENDPOINT", "")
-	discovered := ""
-	if flag == "" && env == "" && serverURL != "" {
-		if doc, derr := discoverOAuth(serverURL); derr == nil {
-			discovered = doc.GraphqlEndpoint
-		}
-	}
-	endpoint := resolveGraphQLEndpoint(flag, env, discovered, serverURL)
+	serverURL := resolveAuthServerURL(cmd)
+	endpoint := resolveGraphQLEndpointFor(cmd, serverURL)
 	if endpoint == "" {
 		return nil, fmt.Errorf("--graphql-endpoint, FILAMENT_GRAPHQL_ENDPOINT, or a server URL is required")
 	}
 	if serverURL == "" {
 		serverURL = endpoint
 	}
-	tokens, err := auth.LoadToken(serverURL)
-	if err != nil {
-		return nil, fmt.Errorf("not logged in (run `flmnt login`): %w", err)
+	bearer := bestEffortBearer(cmd, serverURL)
+	if bearer == "" {
+		return nil, fmt.Errorf("not logged in to %s (run `flmnt login`, or pass --auth-cmd for a local server)", serverURL)
 	}
-	return apiclient.New(endpoint, tokens.AccessToken), nil
+	return apiclient.New(endpoint, strings.TrimPrefix(bearer, "Bearer ")), nil
 }
 
 var newWorkspaceClient = workspaceClient

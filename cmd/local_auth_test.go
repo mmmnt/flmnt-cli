@@ -113,3 +113,5 @@ func TestLocalCredentialsCarryTheHelpersWorkspace(t *testing.T) {
 		t.Fatalf("got %+v err %v", h, err)
 	}
 }
+
+func base64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
