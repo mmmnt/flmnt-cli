@@ -32,7 +32,23 @@ flmnt setup --server-url <flmnt-url> --project <name>   # wire this repo to a wo
 
 `--project` names the workspace **this repo** records into, by name — you do not need its id. It is required, and it pins the repo: every hook targets that workspace regardless of what the CLI is pointed at elsewhere.
 
-`flmnt setup` writes a project-local `.mcp.json` pointing at the local proxy plus a `.claude/` hook map and slash commands; `flmnt proxy` then injects your bearer token on outbound MCP requests — so Claude Code talks to a live, authenticated flmnt MCP without you handling tokens by hand. `setup` is idempotent.
+`flmnt setup` writes a project-local `.mcp.json` pointing at the local proxy plus a `.claude/` hook map and slash commands; `flmnt proxy` then injects your bearer token on outbound MCP requests — so Claude Code talks to a live, authenticated flmnt MCP without you handling tokens by hand. `setup` is idempotent, and it always rewrites the `flmnt` entry of `.mcp.json` to what it is asked for; other servers in that file stay as they are.
+
+### Local flmnt (the compose harness)
+
+A checkout can run against a local flmnt instead of the hosted one. The CLI tells the two apart by the server URL it resolves (`--server-url` / `QUORUM_SERVER_URL` / `.quorum.json` / the login config): a loopback host such as `http://localhost:8000/mcp` is local, anything else is hosted. The hosted path is unchanged — credentials come from the keychain `flmnt login` filled.
+
+A local flmnt mints credentials for a declared person, never for a default, and asks for nothing:
+
+```sh
+flmnt login --local                      # once per machine and OS user — no input, no email
+flmnt whoami --json --client flmnt-cli   # {"sub","workspace","client_id"} — what a headers-helper asks
+flmnt logout --local                     # end the local login
+```
+
+`login --local` derives the identity from a marker the machine already carries (macOS `IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user: `sub = "local_" + UUIDv5(marker + OS user)`, and per tool `client_id = "local_" + UUIDv5(sub, tool)`. Only the digest is kept (`~/.filament/local-identity.json`); the same machine and user give the same sub forever, and two people or two machines never collide. No login, on either side, prints nothing on stdout, one reason on stderr, and exits 1.
+
+On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`, `workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper (the `headersHelper` of the `flmnt` entry in `.mcp.json`, the same command Claude Code runs), with `--client flmnt-cli` appended so its writes are attributed to the CLI. A helper that refuses is "not configured": its reason is shown verbatim, nothing is substituted. The GraphQL endpoint of a local server comes from `local_graphql_endpoint` in the checkout's `.quorum.json` (`FILAMENT_GRAPHQL_ENDPOINT` overrides it); `flmnt setup` carries that field through. `flmnt health` names the environment it resolved and probes that server's `/health`, plus Core/Engine/proxy only when `CORE_URL` / `ENGINE_URL` / `QUORUM_PROXY_PORT` are set.
 
 ### Which workspace a command uses
 
@@ -52,8 +68,11 @@ flmnt <command> -h               # detailed help for a command
 
 # Authentication
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
+flmnt login --local              # a local flmnt: derive this machine's identity, no input
 flmnt logout                     # sign out and revoke local credentials
+flmnt logout --local             # end the local login
 flmnt whoami                     # show your identity and which workspace is in force here
+flmnt whoami --json [--client <tool>]   # {"sub","workspace","client_id"?} for a headers-helper
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
@@ -87,7 +106,7 @@ flmnt corpus --out training                   # render the DOC-NODE documents in
 flmnt corpus --hook --project platform        # SessionStart refresh; wired by setup --corpus-project
 
 # Utilities
-flmnt health                     # check health of Core, Engine, and proxy services
+flmnt health                     # the resolved environment + the server's /health (Core/Engine/proxy when declared)
 flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook
 flmnt dashboard                  # open the dashboard in a browser
 flmnt version                    # print the version
