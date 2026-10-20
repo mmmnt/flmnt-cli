@@ -71,6 +71,33 @@ flmnt MCP without you handling tokens by hand. `setup` is idempotent.
 `flmnt workspace use <name|id>` sets the ACTIVE workspace, which is a per-machine convenience
 for ad-hoc commands — it does not decide where a configured repo records.
 
+### Local harness (no `flmnt login` needed)
+
+A checkout can run against a local flmnt instead of the hosted one. The CLI tells the two apart by
+the server URL it resolves (`--server-url` / `QUORUM_SERVER_URL` / `.quorum.json` / the login config):
+a loopback host — `http://localhost:8000/mcp` — is local, anything else is hosted.
+
+- **Hosted**: credentials come from the keychain `flmnt login` filled, exactly as above.
+- **Local**: credentials come from the checkout's own headers-helper — the `headersHelper` on the
+  `flmnt` entry in `.mcp.json`, the same command Claude Code runs for that server. The CLI runs it
+  with `BROKER_CLIENT_ID=flmnt-cli` in its environment, so what it writes is attributed to the CLI
+  (the entry's own `--client <id>` argument is Claude Code's declaration and is not passed along).
+  The helper prints `{"Authorization":"Bearer …","X-Workspace-Id":"…"}`; the workspace is the
+  session's project when the repo has no pin, and `sync`'s `--local-workspace` default. A helper that
+  refuses (nobody logged in, no client named) is "not configured": nothing is substituted, and
+  `flmnt health` shows its reason.
+- `--auth-cmd <command>` (any command) names a helper explicitly and is run verbatim; without one
+  and without a `.mcp.json` entry, the repo-relative `bash scripts/mcp-auth-header.sh` runs only inside
+  a configured repo (a `.quorum.json`).
+- A local server has no OAuth discovery, so point `FILAMENT_GRAPHQL_ENDPOINT` (or
+  `--graphql-endpoint`) at its router when the GraphQL endpoint is not advertised.
+
+`brief`, `gate`, `derive`, `record-*`, `whoami`, `workspace` and `sync`'s local side all take this path.
+`flmnt whoami --json` is the other direction: it prints the stored login's claims
+(`{"sub","email","username","workspace"}`) decoded offline, which is how a local helper learns who
+to mint for; not logged in → nothing on stdout, the reason on stderr, exit 1. `flmnt setup` leaves a
+loopback `flmnt` entry that carries a `headersHelper` as it is.
+
 ### Which workspace a command uses
 
 `brief`, `derive`, `gate` and `record-*` resolve the project in this order, first match wins:
@@ -93,6 +120,7 @@ flmnt <command> -h               # detailed help for a command
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
 flmnt logout                     # sign out and revoke local credentials
 flmnt whoami                     # show your identity and which workspace is in force here
+flmnt whoami --json              # the stored login's claims as JSON, for a local headers-helper (exit 1 when not logged in)
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
@@ -115,6 +143,7 @@ flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.j
 # Data
 flmnt sync push                  # sync local Quorum data up to the remote workspace
 flmnt sync pull                  # sync remote workspace data down to local
+                                 # the local side authenticates through the checkout's headers-helper
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes
@@ -132,7 +161,7 @@ flmnt corpus --project platform --out training   # …from another workspace you
 flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start
 
 # Utilities
-flmnt health                     # check health of Core, Engine, and proxy services
+flmnt health                     # probe the configured server's /health (local or hosted) and, locally, the headers-helper
 flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook
 flmnt dashboard                  # open the dashboard in a browser
 flmnt version                    # print the version
