@@ -20,8 +20,11 @@ var (
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Authenticate with flmnt via OAuth2 (browser PKCE, or --device for headless)",
+	Short: "Authenticate with flmnt via OAuth2 (browser PKCE, or --device for headless); --local declares the identity a local flmnt mints for",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if local, _ := cmd.Flags().GetBool("local"); local {
+			return runLocalLogin(cmd)
+		}
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		if serverURL == "" {
 			serverURL = envOr("QUORUM_SERVER_URL", "")
@@ -117,5 +120,7 @@ func init() {
 	loginCmd.Flags().String("client-id", "", "OAuth2 client ID")
 	loginCmd.Flags().Bool("device", false, "Use the device-authorization grant (headless, no browser)")
 	loginCmd.Flags().String("device-url", "", "Device-authorization endpoint (with --device)")
+	loginCmd.Flags().Bool("local", false, "record the local login (email + this machine's marker) that a local flmnt mints credentials for")
+	loginCmd.Flags().String("email", "", "the person's email (with --local)")
 	rootCmd.AddCommand(loginCmd)
 }
