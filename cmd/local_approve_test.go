@@ -108,3 +108,55 @@ func TestLocalApproveApprovesAnAuthorizationForTheDerivedClient(t *testing.T) {
 		}
 	}
 }
+
+/* The person confirms: anything but y/yes aborts, and an aborted approval posts nothing. */
+func TestLocalApproveAbortsOnNoWithoutPosting(t *testing.T) {
+	stubLocalIdentity(t, identity.Identity{Sub: testLocalSub}, nil)
+	admin := pendingAuthorization()
+	base := admin.serve(t)
+
+	stdout, err := runLocalApprove(t, "n\n", "BCDF-GHJK", "--admin-url", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(admin.approved) != 0 {
+		t.Fatalf("an aborted approval must post nothing; posted %v", admin.approved)
+	}
+	if !strings.Contains(stdout, "[y/N]") || !strings.Contains(stdout, "Nothing approved.") {
+		t.Fatalf("stdout: %q", stdout)
+	}
+	if strings.Contains(stdout, "Approved.") {
+		t.Fatalf("an aborted approval must not say approved: %q", stdout)
+	}
+}
+
+func TestLocalApproveProceedsOnYes(t *testing.T) {
+	stubLocalIdentity(t, identity.Identity{Sub: testLocalSub}, nil)
+	admin := pendingAuthorization()
+	base := admin.serve(t)
+
+	if _, err := runLocalApprove(t, "y\n", "BCDF-GHJK", "--admin-url", base); err != nil {
+		t.Fatal(err)
+	}
+	if len(admin.approved) != 1 {
+		t.Fatalf("approvals posted: %d", len(admin.approved))
+	}
+}
+
+/* --yes is the answer: stdin is never read, so a closed or empty stdin still approves. */
+func TestLocalApproveYesSkipsThePrompt(t *testing.T) {
+	stubLocalIdentity(t, identity.Identity{Sub: testLocalSub}, nil)
+	admin := pendingAuthorization()
+	base := admin.serve(t)
+
+	stdout, err := runLocalApprove(t, "n\n", "BCDF-GHJK", "--admin-url", base, "--yes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(admin.approved) != 1 {
+		t.Fatalf("--yes must approve regardless of stdin; posted %d", len(admin.approved))
+	}
+	if strings.Contains(stdout, "[y/N]") {
+		t.Fatalf("--yes must not ask: %q", stdout)
+	}
+}

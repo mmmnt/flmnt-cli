@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"strings"
 
 	"github.com/mmmnt/flmnt-cli/internal/localadmin"
 	"github.com/spf13/cobra"
@@ -32,14 +34,32 @@ var localApproveCmd = &cobra.Command{
 			return err
 		}
 		tool := firstNonEmpty(pending.ClientName, pending.ClientID)
-		fmt.Fprintf(cmd.OutOrStdout(), "Approve %s (%s) for sub %s? [y/N] ", tool, pending.RedirectURI, id.Sub)
-		fmt.Fprintln(cmd.OutOrStdout(), "y")
+		what := fmt.Sprintf("%s (%s) for sub %s", tool, pending.RedirectURI, id.Sub)
+		if yes, _ := cmd.Flags().GetBool("yes"); yes {
+			fmt.Fprintf(cmd.OutOrStdout(), "Approving %s.\n", what)
+		} else if !confirm(cmd, "Approve "+what+"?") {
+			fmt.Fprintln(cmd.OutOrStdout(), "Nothing approved.")
+			return nil
+		}
 		if err := localAdminApprove(adminURL, code, id.Sub, id.ClientID(tool)); err != nil {
 			return err
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "Approved. Return to your browser.")
 		return nil
 	},
+}
+
+// confirm asks the question on stdout and reads one line from stdin; only y/yes is a yes. A closed
+// stdin is a no — nothing is approved by default.
+func confirm(cmd *cobra.Command, question string) bool {
+	fmt.Fprint(cmd.OutOrStdout(), question+" [y/N] ")
+	line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	fmt.Fprintln(cmd.OutOrStdout())
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	}
+	return false
 }
 
 func init() {
