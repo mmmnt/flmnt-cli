@@ -86,7 +86,7 @@ func TestPathIsBesideTheConfigNotInsideTheKeyring(t *testing.T) {
 	}
 }
 
-func TestLoadReportsNoLocalLoginAndRemoveEndsIt(t *testing.T) {
+func TestLoadReportsNoLocalLogin(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	if _, err := Load(); err != ErrNotFound {
 		t.Fatalf("err %v, want ErrNotFound", err)
@@ -94,14 +94,8 @@ func TestLoadReportsNoLocalLoginAndRemoveEndsIt(t *testing.T) {
 	if err := Save(Derive("m", "u")); err != nil {
 		t.Fatal(err)
 	}
-	if err := Remove(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Load(); err != ErrNotFound {
-		t.Fatalf("after Remove: err %v, want ErrNotFound", err)
-	}
-	if err := Remove(); err != nil {
-		t.Fatalf("removing an absent login is not an error: %v", err)
+	if got, err := Load(); err != nil || got.Sub != Derive("m", "u").Sub {
+		t.Fatalf("after Save: %+v %v", got, err)
 	}
 }
 

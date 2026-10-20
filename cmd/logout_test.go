@@ -12,15 +12,14 @@ import (
 
 func stubLogoutSeams(t *testing.T) {
 	t.Helper()
-	origLoad, origClear, origTok, origWipe, origRevoke, origRemove := logoutLoadConfig, logoutClearConfig, logoutLoadToken, logoutDeleteAllTokens, logoutRevoke, identityRemove
+	origLoad, origClear, origTok, origWipe, origRevoke := logoutLoadConfig, logoutClearConfig, logoutLoadToken, logoutDeleteAllTokens, logoutRevoke
 	logoutLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
 	logoutClearConfig = func() error { return nil }
 	logoutLoadToken = func(string) (auth.TokenSet, error) { return auth.TokenSet{}, auth.ErrNotFound }
 	logoutDeleteAllTokens = func() ([]string, error) { return nil, nil }
 	logoutRevoke = func(string, string, string) error { return nil }
-	identityRemove = func() error { return nil }
 	t.Cleanup(func() {
-		logoutLoadConfig, logoutClearConfig, logoutLoadToken, logoutDeleteAllTokens, logoutRevoke, identityRemove = origLoad, origClear, origTok, origWipe, origRevoke, origRemove
+		logoutLoadConfig, logoutClearConfig, logoutLoadToken, logoutDeleteAllTokens, logoutRevoke = origLoad, origClear, origTok, origWipe, origRevoke
 	})
 }
 
@@ -50,7 +49,6 @@ separate).
 func TestLogoutClearsEveryTokenAndTheSessionAndKeepsTheLocalIdentity(t *testing.T) {
 	stubLogoutSeams(t)
 	t.Setenv("HOME", t.TempDir())
-	identityRemove = identity.Remove
 	if err := identity.Save(localMike); err != nil {
 		t.Fatal(err)
 	}

@@ -15,7 +15,6 @@ var (
 	identityOSUser = identity.OSUser
 	identitySave   = identity.Save
 	identityLoad   = identity.Load
-	identityRemove = identity.Remove
 )
 
 // runLocalLogin records the LOCAL LOGIN with no input: the marker the host machine already carries

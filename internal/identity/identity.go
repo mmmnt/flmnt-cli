@@ -1,7 +1,9 @@
-// Package identity is the CLI's LOCAL LOGIN: a sub derived from the host machine's marker and the OS
-// user, persisted as a digest, from which per-tool client ids derive. A local flmnt (the compose
+// Package identity is the CLI's LOCAL IDENTITY: a sub derived from the host machine's marker and the
+// OS user, persisted as a digest, from which per-tool client ids derive. A local flmnt (the compose
 // harness) mints credentials for this identity; nothing is reused from the hosted login, nothing is
-// generated at random, and only the digest ever leaves the machine.
+// generated at random, and only the digest ever leaves the machine. The identity is who this machine
+// is, not a login: `flmnt login --local` records it and makes the harness the session, and no logout
+// removes it (founder ruling 2026-10-20 — identity and session are separate).
 package identity
 
 import (
@@ -105,18 +107,6 @@ func Load() (Identity, error) {
 		return Identity{}, ErrNotFound
 	}
 	return i, nil
-}
-
-// Remove ends the local login; an absent login is already ended.
-func Remove() error {
-	path, err := Path()
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	return nil
 }
 
 // uuid5 is RFC 4122 name-based UUID generation with SHA-1.

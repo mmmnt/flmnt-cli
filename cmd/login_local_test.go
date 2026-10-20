@@ -152,7 +152,6 @@ separate; whoami answers by the session's kind, not by which credential survived
 func TestLoginHostedBecomesTheSessionAndKeepsTheLocalIdentity(t *testing.T) {
 	stubLoginSeams(t)
 	t.Setenv("HOME", t.TempDir())
-	identityRemove = identity.Remove
 	if err := identity.Save(localMike); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +211,6 @@ identity: who this machine is outlives every login.
 func TestLogoutLocalEndsTheLocalSessionAndKeepsTheIdentity(t *testing.T) {
 	stubLogoutSeams(t)
 	t.Setenv("HOME", t.TempDir())
-	identityRemove = identity.Remove
 	if err := identity.Save(localMike); err != nil {
 		t.Fatal(err)
 	}
