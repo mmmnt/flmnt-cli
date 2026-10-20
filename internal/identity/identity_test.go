@@ -3,6 +3,7 @@ package identity
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,21 +15,20 @@ func TestUUID5MatchesTheRFCVector(t *testing.T) {
 }
 
 /*
-The sub is derived, never generated: the same machine and email give the same sub forever, a tool
+The sub is derived, never generated: the same machine and OS user give the same sub forever, a tool
 
 	name gives the same client id forever, and two people or two machines never collide — which is
 	what keeps identities apart behind a shared proxy. Nothing comes from the hosted login.
 */
 func TestSubAndClientIDAreDeterministicAndDistinct(t *testing.T) {
-	a := Identity{Email: "mike@flmnt.ai", Marker: "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"}
-	again := Identity{Email: "mike@flmnt.ai", Marker: "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"}
-	otherPerson := Identity{Email: "howie@flmnt.ai", Marker: a.Marker}
-	otherMachine := Identity{Email: a.Email, Marker: "00000000-0000-0000-0000-000000000001"}
+	marker := "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
+	a, again := Derive(marker, "mike"), Derive(marker, "mike")
+	otherPerson, otherMachine := Derive(marker, "howie"), Derive("00000000-0000-0000-0000-000000000001", "mike")
 
-	if a.Sub() != again.Sub() {
-		t.Fatal("the same machine and email must derive the same sub")
+	if a.Sub != again.Sub {
+		t.Fatal("the same machine and user must derive the same sub")
 	}
-	if a.Sub() == otherPerson.Sub() || a.Sub() == otherMachine.Sub() {
+	if a.Sub == otherPerson.Sub || a.Sub == otherMachine.Sub {
 		t.Fatal("different people or machines must not share a sub")
 	}
 	if a.ClientID("flmnt-cli") != again.ClientID("flmnt-cli") {
@@ -37,23 +37,32 @@ func TestSubAndClientIDAreDeterministicAndDistinct(t *testing.T) {
 	if a.ClientID("flmnt-cli") == a.ClientID("claude-code-local") || a.ClientID("flmnt-cli") == otherPerson.ClientID("flmnt-cli") {
 		t.Fatal("client ids are per tool and per person")
 	}
-	if a.Sub() != uuid5(Namespace, a.Marker+"\n"+a.Email) || a.ClientID("flmnt-cli") != uuid5(a.Sub(), "flmnt-cli") {
+	if a.Sub != "local_"+uuid5(Namespace, marker+"\n"+"mike") || a.ClientID("flmnt-cli") != "local_"+uuid5(strings.TrimPrefix(a.Sub, "local_"), "flmnt-cli") {
 		t.Fatal("derivation must be exactly the documented one")
+	}
+	if !strings.HasPrefix(a.Sub, "local_") || !strings.HasPrefix(a.ClientID("flmnt-cli"), "local_") {
+		t.Fatal("both derived ids carry the local_ prefix so the hosted side recognises them without a lookup")
 	}
 }
 
-func TestSaveAndLoadRoundTripWithOwnerOnlyPermissions(t *testing.T) {
+/* Only the digest is kept: the file that makes the login explicit holds the sub and when, never the raw marker. */
+func TestSaveKeepsTheDigestNotTheMarker(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	want := Identity{Email: "mike@flmnt.ai", Marker: "ABB0B3CF"}
+	marker := "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
+	id := Derive(marker, "mike")
 
-	if err := Save(want); err != nil {
+	if err := Save(id); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Load()
-	if err != nil || got != want {
+	if err != nil || got.Sub != id.Sub || got.CreatedAt == "" {
 		t.Fatalf("got %+v err %v", got, err)
 	}
 	path, _ := Path()
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), marker) || strings.Contains(string(raw), "mike") {
+		t.Fatalf("the raw marker or user must never be stored: %s", raw)
+	}
 	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v, want 0600", fi.Mode().Perm())
 	}
@@ -62,10 +71,22 @@ func TestSaveAndLoadRoundTripWithOwnerOnlyPermissions(t *testing.T) {
 	}
 }
 
-func TestLoadReportsNoLocalLogin(t *testing.T) {
+func TestLoadReportsNoLocalLoginAndRemoveEndsIt(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	if _, err := Load(); err != ErrNotFound {
 		t.Fatalf("err %v, want ErrNotFound", err)
+	}
+	if err := Save(Derive("m", "u")); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(); err != ErrNotFound {
+		t.Fatalf("after Remove: err %v, want ErrNotFound", err)
+	}
+	if err := Remove(); err != nil {
+		t.Fatalf("removing an absent login is not an error: %v", err)
 	}
 }
 

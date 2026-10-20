@@ -1,7 +1,7 @@
-// Package identity is the CLI's LOCAL LOGIN: a declared email plus an identifying marker read from
-// the host machine, persisted, from which a unique sub and per-tool client ids derive. A local
-// flmnt (the compose harness) mints credentials for this identity; nothing is reused from the hosted
-// login or from stream data, and nothing is ever generated at random.
+// Package identity is the CLI's LOCAL LOGIN: a sub derived from the host machine's marker and the OS
+// user, persisted as a digest, from which per-tool client ids derive. A local flmnt (the compose
+// harness) mints credentials for this identity; nothing is reused from the hosted login, nothing is
+// generated at random, and only the digest ever leaves the machine.
 package identity
 
 import (
@@ -12,32 +12,54 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 )
 
 // Namespace is the fixed UUIDv5 namespace every local sub derives under. Changing it would change
-// every local identity, so it is defined once and documented in the README.
-const Namespace = "c0a3f0d2-5b1e-4d7a-9c3e-2f6b8a1d4e70"
+// every local identity, so it is defined once and documented in the README. Prefix marks both derived
+// ids as local (the `conn_` precedent) so the hosted side can tell a local identity without a lookup
+// when a person later links this machine to a hosted account.
+const (
+	Namespace = "c0a3f0d2-5b1e-4d7a-9c3e-2f6b8a1d4e70"
+	Prefix    = "local_"
+)
 
-var ErrNotFound = errors.New("no local login (run `flmnt login --local --email <email>`)")
+var ErrNotFound = errors.New("no local login (run `flmnt login --local`)")
 
+// Identity is what the login file holds: the derived sub and when the login was made. The marker
+// and the user it derives from are never stored.
 type Identity struct {
-	Email  string `json:"email"`
-	Marker string `json:"marker"`
+	Sub       string `json:"sub"`
+	CreatedAt string `json:"created_at"`
 }
 
-// Sub is UUIDv5(Namespace, marker + "\n" + email): the same machine and email derive the same sub
-// forever; two people or two machines never collide.
-func (i Identity) Sub() string {
-	return uuid5(Namespace, i.Marker+"\n"+i.Email)
+// Derive is sub = Prefix + UUIDv5(Namespace, marker + "\n" + osUser): the same machine and user derive
+// the same sub forever; two people or two machines never collide.
+func Derive(marker, osUser string) Identity {
+	return Identity{Sub: Prefix + uuid5(Namespace, marker+"\n"+osUser), CreatedAt: time.Now().UTC().Format(time.RFC3339)}
 }
 
-// ClientID is UUIDv5(sub, tool): a tool name derives the same client id forever for this person.
+// ClientID is Prefix + UUIDv5(sub, tool), the sub's UUID being the namespace: a tool name derives the
+// same client id forever for this identity.
 func (i Identity) ClientID(tool string) string {
-	return uuid5(i.Sub(), tool)
+	return Prefix + uuid5(strings.TrimPrefix(i.Sub, Prefix), tool)
+}
+
+// OSUser is the account the CLI runs as, the second input of the derivation.
+func OSUser() (string, error) {
+	u, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	if u.Username == "" {
+		return "", errors.New("the OS user has no name")
+	}
+	return u.Username, nil
 }
 
 func Path() (string, error) {
@@ -79,10 +101,22 @@ func Load() (Identity, error) {
 	if err := json.Unmarshal(raw, &i); err != nil {
 		return Identity{}, err
 	}
-	if i.Email == "" || i.Marker == "" {
+	if i.Sub == "" {
 		return Identity{}, ErrNotFound
 	}
 	return i, nil
+}
+
+// Remove ends the local login; an absent login is already ended.
+func Remove() error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // uuid5 is RFC 4122 name-based UUID generation with SHA-1.
