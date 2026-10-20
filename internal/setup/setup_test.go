@@ -313,3 +313,52 @@ func TestSetupWiresTheCorpusRefreshOnlyWhenThereIsACorpus(t *testing.T) {
 		t.Errorf("a repo with no corpus must not gain a refresh that can only render nothing; got\n%s", without)
 	}
 }
+
+/*
+Founder ruling: "setup should override the flmnt key no matter what". A loopback `flmnt` entry that
+
+	carried a headersHelper (the retired quorum helper) is rewritten to what setup was asked for like
+	any other; the other servers stay verbatim.
+*/
+func TestRunRewritesALoopbackFlmntEntryThatCarriesAHeadersHelper(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"mcpServers":{"atlassian":{"type":"stdio","command":"uvx"},"flmnt":{"type":"http","url":"http://localhost:8000/mcp","headersHelper":"bash scripts/mcp-auth-header.sh"}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "https://mcp.production.flmnt.ai", ProjectID: "p", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	s := readMCPServers(t, dir)
+	if f := s["flmnt"]; f["url"] != "https://mcp.production.flmnt.ai" || f["headersHelper"] != nil {
+		t.Errorf("the flmnt entry must follow --server-url no matter what: %v", f)
+	}
+	if _, ok := s["atlassian"]; !ok {
+		t.Error("the other server must survive verbatim")
+	}
+}
+
+/*
+The harness publishes its router on the host and the checkout DECLARES where, in .quorum.json. setup
+
+	rewrites that file on every run, so a declaration it does not know would be dropped the next time
+	anyone re-ran setup; the field is read back and written out.
+*/
+func TestRunPreservesTheLocalGraphQLEndpointDeclaration(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"server_url":"https://mcp.production.flmnt.ai","project_id":"bc674142","local_graphql_endpoint":"http://localhost:4000/graphql"}`
+	if err := os.WriteFile(filepath.Join(dir, ".quorum.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "https://mcp.production.flmnt.ai", ProjectID: "bc674142", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil || pc.LocalGraphQLEndpoint != "http://localhost:4000/graphql" {
+		t.Fatalf("got %+v err %v", pc, err)
+	}
+}

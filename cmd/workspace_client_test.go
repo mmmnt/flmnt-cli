@@ -12,7 +12,7 @@ import (
 `flmnt workspace list` authenticates through the same bearer path as brief and derive: the keychain
 
 	token stored under the server URL. For a loopback server that is the one `flmnt login --local`
-	stores, so the harness lists its workspaces with no helper in the way.
+	stores, so the harness lists its workspaces without a hosted `flmnt login`.
 */
 func TestWorkspaceClientAuthenticatesFromTheKeychainForALoopbackServer(t *testing.T) {
 	var seen string
@@ -24,7 +24,6 @@ func TestWorkspaceClientAuthenticatesFromTheKeychainForALoopbackServer(t *testin
 	t.Setenv("FILAMENT_GRAPHQL_ENDPOINT", srv.URL)
 	token := freshJWT(t, "local-login")
 	stubKeychain(t, token, nil)
-	stubHelper(t, helperPrinting(t, "HELPER-TOKEN"))
 	if err := workspaceListCmd.Flags().Set("server-url", "http://localhost:8000/mcp"); err != nil {
 		t.Fatal(err)
 	}

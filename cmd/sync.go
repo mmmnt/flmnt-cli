@@ -7,33 +7,13 @@ import (
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/mmmnt/flmnt-cli/internal/auth"
-	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/mmmnt/flmnt-cli/internal/sync"
 	"github.com/spf13/cobra"
 )
 
-// resolveAuthCmd chooses the headers-helper command. An explicit --local-auth-cmd / --auth-cmd is
-// honored verbatim; then the checkout's own `flmnt` entry in .mcp.json names the helper Claude Code
-// runs, which the CLI runs too; last, the repo-relative default (defaultLocalAuthCmd) runs ONLY inside a
-// configured flmnt project (a .quorum.json in the working directory), so `flmnt sync` in an unrelated
-// repo cannot auto-execute that repo's script via the SessionEnd hook.
-func resolveAuthCmd(flagVal, dir string) (string, error) {
-	if flagVal != "" {
-		return flagVal, nil
-	}
-	if entry, err := setup.FlmntEntry(dir); err == nil && entry.HeadersHelper != "" {
-		return entry.HeadersHelper, nil
-	}
-	if _, err := setup.LoadProjectConfig(dir); err != nil {
-		return "", fmt.Errorf("no --auth-cmd, no headersHelper on the flmnt entry in .mcp.json and no .quorum.json in the working directory; refusing to run the default cwd script %q (run `flmnt setup` here or pass --auth-cmd)", defaultLocalAuthCmd)
-	}
-	return defaultLocalAuthCmd, nil
-}
-
 const (
 	defaultLocalURL       = "http://localhost:8000"
 	defaultLocalWorkspace = "quorum"
-	defaultLocalAuthCmd   = "bash scripts/mcp-auth-header.sh"
 )
 
 var syncCmd = &cobra.Command{
@@ -152,7 +132,7 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	if url == "" {
 		url = defaultLocalURL
 	}
-	bearer := keychainBearer(cmd, url)
+	bearer := bestEffortBearer(cmd, url)
 	if bearer == "" {
 		return sync.Endpoint{}, loginRequired(url)
 	}

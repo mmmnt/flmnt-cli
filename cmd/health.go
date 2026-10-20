@@ -57,7 +57,7 @@ func HealthEnvironmentLine(serverURL string) string {
 // server URL. The hooks that use it stay quiet by contract, so an absent token would otherwise
 // surface nowhere; this is where it does, with the login that fills it.
 func localTokenResult(cmd *cobra.Command, serverURL string) health.Result {
-	bearer := keychainBearer(cmd, serverURL)
+	bearer := bestEffortBearer(cmd, serverURL)
 	if bearer == "" {
 		return health.Result{Service: "token", OK: false, Message: loginRequired(serverURL).Error()}
 	}
