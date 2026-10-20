@@ -106,3 +106,26 @@ func TestRunStillRewritesAHostedFlmntEntry(t *testing.T) {
 		t.Errorf("a hosted entry is setup-managed and must follow --server-url: %+v", entry)
 	}
 }
+
+/*
+The harness publishes its router on the host and the checkout DECLARES where, in .quorum.json. setup
+
+	rewrites that file on every run, so a declaration it does not know would be dropped the next time
+	anyone re-ran setup; the field is read back and written out.
+*/
+func TestRunPreservesTheLocalGraphQLEndpointDeclaration(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"server_url":"https://mcp.production.flmnt.ai","project_id":"bc674142","local_graphql_endpoint":"http://localhost:4000/graphql"}`
+	if err := os.WriteFile(filepath.Join(dir, ".quorum.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "https://mcp.production.flmnt.ai", ProjectID: "bc674142", ProxyPort: 9876, Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil || pc.LocalGraphQLEndpoint != "http://localhost:4000/graphql" {
+		t.Fatalf("got %+v err %v", pc, err)
+	}
+}

@@ -33,6 +33,9 @@ type ProjectConfig struct {
 	// CorpusProject is the workspace whose DOC-NODE documents `flmnt corpus` renders into this repo.
 	// Separate from ProjectID because doctrine and a project's own memory are different workspaces.
 	CorpusProject string `json:"corpus_project,omitempty"`
+	// LocalGraphQLEndpoint is where the checkout's local flmnt publishes its router. A local server
+	// has no OAuth discovery to advertise it, so the checkout declares it here; setup preserves it.
+	LocalGraphQLEndpoint string `json:"local_graphql_endpoint,omitempty"`
 }
 
 // The two .mcp.json server entries `setup` can manage:
@@ -103,8 +106,11 @@ func Run(cfg Config) error {
 }
 
 func writeProjectConfig(dir string, cfg Config) error {
-	path := filepath.Join(dir, ".quorum.json")
-	return writeJSON(path, ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName, CorpusProject: cfg.CorpusProject})
+	pc := ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName, CorpusProject: cfg.CorpusProject}
+	if existing, err := LoadProjectConfig(dir); err == nil {
+		pc.LocalGraphQLEndpoint = existing.LocalGraphQLEndpoint
+	}
+	return writeJSON(filepath.Join(dir, ".quorum.json"), pc)
 }
 
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {

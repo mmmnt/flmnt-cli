@@ -45,9 +45,11 @@ func TestResolveAuthCmdReadsTheCheckoutsHeadersHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verbatim, Claude Code's own `--client` included: the helper takes the LAST --client, and the CLI
+	// appends its own when it runs the command (runAuthHelper).
 	got, err := resolveAuthCmd("", dir)
-	if err != nil || got != "bash scripts/mcp-auth-header.sh" {
-		t.Fatalf("got %q err %v, want the .mcp.json headersHelper (less the entry's own --client, see below)", got, err)
+	if err != nil || got != "bash scripts/mcp-auth-header.sh --client claude-code-local" {
+		t.Fatalf("got %q err %v, want the .mcp.json headersHelper verbatim", got, err)
 	}
 	if got, _ := resolveAuthCmd("my-cmd", dir); got != "my-cmd" {
 		t.Fatalf("an explicit command still wins: %q", got)
@@ -180,33 +182,5 @@ func TestResolveLocalEndpointTakesTheWorkspaceFromTheHelper(t *testing.T) {
 	}
 	if ep.Workspace != "bc674142-782e-4fc3-aa79-585d12ff2d96" {
 		t.Fatalf("workspace %q, want the helper's X-Workspace-Id", ep.Workspace)
-	}
-}
-
-/*
-Claude Code's entry declares ITS client as an argument — `--client claude-code-local` — and the helper
-
-	lets that argument beat BROKER_CLIENT_ID. Run verbatim, the entry minted the CLI's credential for
-	Claude Code, so every entry the CLI wrote was attributed to Claude Code (found live: the
-	memoryImport the Stop hook sent carried client_id=claude-code-local). The CLI runs the checkout's
-	helper without the entry's client declaration; its own client id travels in the environment.
-*/
-func TestResolveAuthCmdDropsTheEntrysClientDeclaration(t *testing.T) {
-	dir := t.TempDir()
-	mcp := `{"mcpServers":{"flmnt":{"type":"http","url":"http://localhost:8000/mcp","headersHelper":"bash scripts/mcp-auth-header.sh --client claude-code-local"}}}`
-	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(mcp), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := resolveAuthCmd("", dir)
-	if err != nil || got != "bash scripts/mcp-auth-header.sh" {
-		t.Fatalf("got %q err %v, want the helper without Claude Code's --client", got, err)
-	}
-	if got := withoutClientArg("bash h.sh --client=claude-code-local --verbose"); got != "bash h.sh --verbose" {
-		t.Fatalf("--client=<id>: got %q", got)
-	}
-	// An explicit --auth-cmd is the caller's own statement and is honored verbatim.
-	if got, _ := resolveAuthCmd("bash h.sh --client x", dir); got != "bash h.sh --client x" {
-		t.Fatalf("explicit: got %q", got)
 	}
 }

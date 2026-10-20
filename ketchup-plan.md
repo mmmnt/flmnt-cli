@@ -45,18 +45,15 @@ the registered OAuth client). Plain whoami says "local identity <sub>". The CLI 
 - [x] Burst 15: `internal/identity` — local_-prefixed UUIDv5 derivation under a fixed namespace, the host marker readers, the digest-only login file [depends: none]
 - [x] Burst 16: `login --local` (no input) records the derived sub, `logout --local` removes it; refuses without a marker [depends: 15]
 - [x] Burst 17: the helper runs with `--client flmnt-cli` (BROKER_CLIENT_ID dropped) [depends: 5]
+- [x] Burst 18: on a loopback server the checkout's `local_graphql_endpoint` (.quorum.json) is the GraphQL endpoint before `<server>/graphql`; setup preserves the field; the `--client` strip is gone (the helper takes the last one) [depends: 2]
 
 ## Left open (founder decisions — not guessed)
 
-- The harness publishes only the MCP (`:8000`); the router (`flmnt-router:4000/graphql`) is in-network
-  only and the MCP's discovery document 404s there, so every GraphQL command needs
-  `FILAMENT_GRAPHQL_ENDPOINT` (or `--graphql-endpoint`) pointing at a host-reachable router. Either the
-  compose publishes `127.0.0.1:4000` or the MCP proxies `/graphql`; that is a quorum-side change.
+- CLOSED (founder): the harness publishes the router at 127.0.0.1:4000 and the checkout declares it as
+  `local_graphql_endpoint` in .quorum.json (burst 18).
 - `setup --server-url <hosted>` inside a checkout whose `flmnt` entry is loopback + headersHelper keeps
   that entry and says so. There is no flag to force the overwrite ("unless asked" is undefined).
-- The CLI drops the `.mcp.json` entry's own `--client <tool>` before appending `--client flmnt-cli`
-  (`withoutClientArg`): the CLI parses that one argument of the helper's. If the helper is instead
-  defined to take the LAST `--client`, the strip can go.
+- CLOSED: the helper takes the LAST `--client`, so the CLI appends its own and parses nothing.
 - `whoami --json` on a hosted server with `--client` prints the registered OAuth client id
   (QUORUM_CLIENT_ID / config client_id), not a derived one — per the contract; flagged in case the
   founder wants the derived form on both sides.

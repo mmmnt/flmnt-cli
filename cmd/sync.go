@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
@@ -22,30 +21,12 @@ func resolveAuthCmd(flagVal, dir string) (string, error) {
 		return flagVal, nil
 	}
 	if entry, err := setup.FlmntEntry(dir); err == nil && entry.HeadersHelper != "" {
-		return withoutClientArg(entry.HeadersHelper), nil
+		return entry.HeadersHelper, nil
 	}
 	if _, err := setup.LoadProjectConfig(dir); err != nil {
 		return "", fmt.Errorf("no --auth-cmd, no headersHelper on the flmnt entry in .mcp.json and no .quorum.json in the working directory; refusing to run the default cwd script %q (run `flmnt setup` here or pass --auth-cmd)", defaultLocalAuthCmd)
 	}
 	return defaultLocalAuthCmd, nil
-}
-
-// withoutClientArg drops a `--client <id>` / `--client=<id>` argument from a helper command. The
-// .mcp.json entry declares Claude Code's tool that way; the CLI names its own when it runs the helper
-// (runAuthHelper), and two declarations would leave the helper to pick one.
-func withoutClientArg(command string) string {
-	words := strings.Fields(command)
-	kept := words[:0]
-	for i := 0; i < len(words); i++ {
-		switch {
-		case words[i] == "--client" && i+1 < len(words):
-			i++
-		case strings.HasPrefix(words[i], "--client="):
-		default:
-			kept = append(kept, words[i])
-		}
-	}
-	return strings.Join(kept, " ")
 }
 
 const (

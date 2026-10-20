@@ -103,9 +103,9 @@ stored OAuth login (`client_id` is then the registered OAuth client); `client_id
 **Credentials.** On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`,
 `workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper: the
 `headersHelper` on the `flmnt` entry in `.mcp.json`, the same command Claude Code runs for that
-server. The CLI runs it with `--client flmnt-cli` appended (the entry's own `--client <tool>` is Claude
-Code's declaration and is dropped), so the helper mints for the client id derived for the CLI and its
-writes are attributed to it. The helper prints `{"Authorization":"Bearer …","X-Workspace-Id":"…"}`;
+server. The CLI runs it with `--client flmnt-cli` appended (the helper takes the last `--client`, so
+the entry's own declaration for Claude Code does not apply), so the helper mints for the client id
+derived for the CLI and its writes are attributed to it. The helper prints `{"Authorization":"Bearer …","X-Workspace-Id":"…"}`;
 the workspace is the session's project when the repo has no pin, and `sync`'s `--local-workspace`
 default. A helper that refuses is "not configured": its reason is surfaced verbatim, nothing is
 substituted, and `flmnt health` shows it. `--auth-cmd <command>` names a helper explicitly; without
@@ -113,9 +113,11 @@ one and without a `.mcp.json` entry, the repo-relative `bash scripts/mcp-auth-he
 inside a configured repo (a `.quorum.json`). On a hosted server the helper is consulted only when no
 login is stored.
 
-A local server has no OAuth discovery, so point `FILAMENT_GRAPHQL_ENDPOINT` (or `--graphql-endpoint`)
-at its router when the GraphQL endpoint is not advertised. `flmnt setup` leaves a loopback `flmnt`
-entry that carries a `headersHelper` as it is.
+A local server has no OAuth discovery to advertise its router, so the checkout declares it in
+`.quorum.json` as `"local_graphql_endpoint": "http://localhost:4000/graphql"`; on a loopback server
+that is read before the `<server>/graphql` fallback (`--graphql-endpoint` / `FILAMENT_GRAPHQL_ENDPOINT`
+still win), and `flmnt setup` preserves the field. `flmnt setup` also leaves a loopback `flmnt` entry
+that carries a `headersHelper` as it is.
 
 ### Which workspace a command uses
 

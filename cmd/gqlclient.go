@@ -5,11 +5,14 @@ import (
 	"strings"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
+	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
 )
 
 // resolveGraphQLEndpointFor resolves the router GraphQL endpoint for a server URL: an explicit flag or
-// env, else the MCP discovery's graphql_endpoint, else serverURL/graphql.
+// env, else the MCP discovery's graphql_endpoint, else — on a loopback server, which has no discovery
+// — the local_graphql_endpoint the checkout declares in .quorum.json, else serverURL/graphql.
 func resolveGraphQLEndpointFor(cmd *cobra.Command, serverURL string) string {
 	flag, _ := cmd.Flags().GetString("graphql-endpoint")
 	env := envOr("FILAMENT_GRAPHQL_ENDPOINT", "")
@@ -17,6 +20,11 @@ func resolveGraphQLEndpointFor(cmd *cobra.Command, serverURL string) string {
 	if flag == "" && env == "" && serverURL != "" {
 		if doc, derr := discoverOAuth(serverURL); derr == nil {
 			discovered = doc.GraphqlEndpoint
+		}
+		if discovered == "" && httpx.IsLoopback(serverURL) {
+			if pc, perr := setup.LoadProjectConfig(""); perr == nil {
+				discovered = pc.LocalGraphQLEndpoint
+			}
 		}
 	}
 	return resolveGraphQLEndpoint(flag, env, discovered, serverURL)
