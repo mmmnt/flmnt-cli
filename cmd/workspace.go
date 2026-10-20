@@ -55,8 +55,8 @@ func resolveGraphQLEndpoint(flag, env, discovered, serverURL string) string {
 }
 
 // workspaceClient builds the authenticated router client for the workspace commands: the server the
-// session resolves to and the bearer every other command uses — the checkout's headers-helper for a
-// loopback server, the keychain `flmnt login` filled otherwise.
+// session resolves to and the bearer every other command uses — the keychain token stored under that
+// server URL by `flmnt login`, or by `flmnt login --local` for the harness.
 func workspaceClient(cmd *cobra.Command) (*apiclient.Client, error) {
 	serverURL := resolveAuthServerURL(cmd)
 	endpoint := resolveGraphQLEndpointFor(cmd, serverURL)
@@ -68,7 +68,7 @@ func workspaceClient(cmd *cobra.Command) (*apiclient.Client, error) {
 	}
 	bearer := bestEffortBearer(cmd, serverURL)
 	if bearer == "" {
-		return nil, fmt.Errorf("not logged in to %s (run `flmnt login`, or pass --auth-cmd for a local server)", serverURL)
+		return nil, loginRequired(serverURL)
 	}
 	return apiclient.New(endpoint, strings.TrimPrefix(bearer, "Bearer ")), nil
 }

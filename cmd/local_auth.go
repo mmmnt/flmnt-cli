@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/spf13/cobra"
 )
 
@@ -94,6 +95,17 @@ func localCredentials(cmd *cobra.Command, dir string) (helperHeaders, error) {
 // Nothing is ever substituted when it holds none.
 func bestEffortBearer(cmd *cobra.Command, serverURL string) string {
 	return keychainBearer(cmd, serverURL)
+}
+
+// loginRequired is the refusal for a server with no stored token. The keychain is filled per server
+// URL, so the hint names the login that fills it for THIS one: `flmnt login --local` for the harness,
+// `flmnt login` for a hosted flmnt.
+func loginRequired(serverURL string) error {
+	login := "flmnt login"
+	if httpx.IsLoopback(serverURL) {
+		login = "flmnt login --local"
+	}
+	return fmt.Errorf("not logged in to %s: run `%s --server-url %s`", serverURL, login, serverURL)
 }
 
 // keychainBearer returns a fresh "Bearer <token>" if logged in to serverURL, else "". Mirrors how

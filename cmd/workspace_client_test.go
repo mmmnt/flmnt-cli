@@ -42,17 +42,28 @@ func TestWorkspaceClientAuthenticatesFromTheKeychainForALoopbackServer(t *testin
 	}
 }
 
-/* With neither a login nor a helper the refusal still names `flmnt login`. */
-func TestWorkspaceClientStillRefusesWithoutAnyCredential(t *testing.T) {
+/*
+A server with no stored token is refused the same way, local and hosted alike, and the hint names the
+
+	login that fills the keychain for THAT server: `flmnt login --local` for the harness — the old hint
+	pointed at a helper flag for a local server — and `flmnt login` for a hosted one.
+*/
+func TestWorkspaceClientRefusalNamesTheLoginForTheServer(t *testing.T) {
 	t.Setenv("FILAMENT_GRAPHQL_ENDPOINT", "http://127.0.0.1:1/graphql")
 	stubKeychain(t, "", auth.ErrNotFound)
-	stubHelper(t, helper("exit 1"))
-	if err := workspaceListCmd.Flags().Set("server-url", "https://mcp.production.flmnt.ai/mcp"); err != nil {
-		t.Fatal(err)
-	}
 	t.Cleanup(func() { _ = workspaceListCmd.Flags().Set("server-url", "") })
 
-	if _, err := workspaceClient(workspaceListCmd); err == nil {
-		t.Fatal("expected a refusal")
+	cases := map[string]string{
+		"http://localhost:8000/mcp":           "not logged in to http://localhost:8000/mcp: run `flmnt login --local --server-url http://localhost:8000/mcp`",
+		"https://mcp.production.flmnt.ai/mcp": "not logged in to https://mcp.production.flmnt.ai/mcp: run `flmnt login --server-url https://mcp.production.flmnt.ai/mcp`",
+	}
+	for server, want := range cases {
+		if err := workspaceListCmd.Flags().Set("server-url", server); err != nil {
+			t.Fatal(err)
+		}
+		_, err := workspaceClient(workspaceListCmd)
+		if err == nil || err.Error() != want {
+			t.Errorf("%s: got %v, want %q", server, err, want)
+		}
 	}
 }
