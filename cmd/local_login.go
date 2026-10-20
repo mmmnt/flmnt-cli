@@ -117,17 +117,32 @@ func localSession(id identity.Identity, serverURL string, now time.Time) auth.CL
 	}
 }
 
-// runLocalLogout removes the local login only. When it was the session, the session goes with it.
+// runLocalLogout ends a LOCAL session: its token and the config go, as `logout` would, and the
+// identity stays — who this machine is outlives every login. A hosted session is not what --local
+// names and is left alone, with the command that does end it.
 func runLocalLogout(cmd *cobra.Command) error {
-	if err := identityRemove(); err != nil {
-		return fmt.Errorf("removing the local login: %w", err)
-	}
-	if cfg, err := logoutLoadConfig(); err == nil && cfg.LoginKind() == auth.LoginLocal {
-		if err := logoutClearConfig(); err != nil {
-			return fmt.Errorf("clearing the session: %w", err)
+	cfg, _ := logoutLoadConfig()
+	out := cmd.OutOrStdout()
+	if cfg.LoginKind() != auth.LoginLocal {
+		if cfg.LoginKind() == auth.LoginHosted {
+			fmt.Fprintf(out, "The session is a hosted login (%s), not a local one; `flmnt logout` ends it.\n", firstNonEmpty(cfg.Identity, cfg.ServerURL))
+			return nil
 		}
+		fmt.Fprintln(out, "No local login to end.")
+		return nil
 	}
-	fmt.Fprintln(cmd.OutOrStdout(), "Local login removed.")
+	removed, err := logoutDeleteAllTokens()
+	if err != nil {
+		return fmt.Errorf("clearing keychain: %w", err)
+	}
+	if err := logoutClearConfig(); err != nil {
+		return fmt.Errorf("clearing the session: %w", err)
+	}
+	identitySub := ""
+	if id, err := identityLoad(); err == nil {
+		identitySub = id.Sub
+	}
+	fmt.Fprintln(out, logoutLine(cfg, auth.OriginsOf(removed), identitySub))
 	return nil
 }
 

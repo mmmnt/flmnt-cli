@@ -204,26 +204,46 @@ func TestHostedSessionKeepsTheWorkspaceOnlyForTheSameHostedServer(t *testing.T) 
 	}
 }
 
-func TestLogoutLocalRemovesTheLocalLoginAndItsSession(t *testing.T) {
+/*
+`logout --local` ends a LOCAL SESSION: its token and the config go, exactly as `logout` would, and the
+identity stays. A hosted session is left alone — it is not what --local names. Nothing removes the
+identity: who this machine is outlives every login.
+*/
+func TestLogoutLocalEndsTheLocalSessionAndKeepsTheIdentity(t *testing.T) {
 	stubLogoutSeams(t)
-	removed := false
-	identityRemove = func() error { removed = true; return nil }
-	logoutLoadConfig = func() (auth.CLIConfig, error) {
-		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL}, nil
+	t.Setenv("HOME", t.TempDir())
+	identityRemove = identity.Remove
+	if err := identity.Save(localMike); err != nil {
+		t.Fatal(err)
 	}
-	cleared := false
+	logoutLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL, Identity: localMike.Sub}, nil
+	}
+	wiped, cleared := false, false
+	logoutDeleteAllTokens = func() ([]string, error) { wiped = true; return []string{defaultLocalURL + "|access_token"}, nil }
 	logoutClearConfig = func() error { cleared = true; return nil }
 
-	if _, err := runLogout(t, "--local"); err != nil || !removed || !cleared {
-		t.Fatalf("err %v removed %v cleared %v", err, removed, cleared)
+	stdout, err := runLogout(t, "--local")
+	if err != nil || !wiped || !cleared {
+		t.Fatalf("err %v wiped %v cleared %v", err, wiped, cleared)
+	}
+	if kept, err := identity.Load(); err != nil || kept.Sub != localMike.Sub {
+		t.Errorf("the identity must survive; got %+v %v", kept, err)
+	}
+	if !strings.Contains(stdout, "Ended the local login "+localMike.Sub) || !strings.Contains(stdout, "stays") {
+		t.Errorf("got %q", stdout)
 	}
 
-	cleared = false
+	wiped, cleared = false, false
 	logoutLoadConfig = func() (auth.CLIConfig, error) {
 		return auth.CLIConfig{Login: auth.LoginHosted, ServerURL: "https://mcp.production.flmnt.ai"}, nil
 	}
-	if _, err := runLogout(t, "--local"); err != nil || cleared {
-		t.Fatalf("--local leaves a hosted session alone: err %v cleared %v", err, cleared)
+	stdout, err = runLogout(t, "--local")
+	if err != nil || wiped || cleared {
+		t.Fatalf("--local leaves a hosted session alone: err %v wiped %v cleared %v", err, wiped, cleared)
+	}
+	if !strings.Contains(stdout, "hosted") || !strings.Contains(stdout, "flmnt logout") {
+		t.Errorf("the line must say the session is hosted and name the command that ends it; got %q", stdout)
 	}
 }
 
