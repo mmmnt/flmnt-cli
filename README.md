@@ -93,6 +93,7 @@ credentials come from the keychain `flmnt login` filled.
 ```sh
 flmnt login --local                           # once per machine and OS user — no input; also obtains the CLI's own local token
 flmnt local approve <code>                    # approve a client's pending sign-in (claude.ai, Claude Code) for the local login
+flmnt local claim <code> --server-url <url>   # from YOUR machine: claim a code shown by a teammate's flmnt for your identity, before they approve
 flmnt whoami --json --client flmnt-cli        # the identity as one JSON object, with the client id derived for a tool
 flmnt logout --local                          # end a local session (the identity stays)
 ```
@@ -125,6 +126,16 @@ sign-in) is approved for the client id derived for `flmnt-cli`. No local login r
 is asked; the broker's refusals (`LOCAL_APPROVAL_UNKNOWN`, `LOCAL_APPROVAL_EXPIRED`,
 `LOCAL_APPROVAL_ALREADY_APPROVED`, `LOCAL_SUB_INVALID`, `LOCAL_CLIENT_INVALID`,
 `LOCAL_ADMIN_NOT_LOOPBACK`) are surfaced verbatim.
+
+**Connecting to a teammate's harness.** When the approval page belongs to someone else's flmnt (behind
+their tunnel), the host's `approve` would otherwise sign you in as the HOST. Before they approve, run
+`flmnt local claim <code> --server-url <their PUBLIC_URL>` on your machine: the CLI asks their edge
+what the code is waiting for (`GET /local/claim?code=`), confirms (`Claim Claude (…) on <url> for your
+identity local_…? [y/N]`), and posts your own identity — the sub `flmnt login --local` recorded here
+and the client id derived for the client's name — to `POST /local/claim`. Their `approve` then shows
+"for sub local_<you> (claimed from another machine)" and keeps your identity, so your writes are
+yours (QRM-ADR-016 §5a, SPEC-LOCAL-007). One claim per code; `LOCAL_CLAIM_ALREADY_MADE` and the
+other refusals are surfaced verbatim. Tell the host your code; the code is how they verify it is you.
 
 `flmnt login --local` also obtains the CLI's own harness token once the login is recorded: when the
 session's server advertises a device grant in its OAuth discovery, the CLI runs the device grant as
@@ -177,6 +188,7 @@ flmnt whoami --json [--client <tool>]   # the identity as one JSON object (exit 
 
 # Local harness
 flmnt local approve <code> [--yes] [--admin-url <url>]   # approve a client's pending sign-in on the local broker for the local login
+flmnt local claim <code> --server-url <url> [--yes]      # claim a teammate's pending code for this machine's identity, before they approve
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
