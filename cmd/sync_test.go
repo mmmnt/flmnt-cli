@@ -151,7 +151,7 @@ func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
 	if err := cmd.Flags().Set("local-auth-cmd", `echo '{"Authorization": "Bearer L"}'`); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", defaultLocalAuthCmd) })
+	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", "") })
 
 	ep, err := resolveLocalEndpoint(cmd)
 	if err != nil {
@@ -162,5 +162,22 @@ func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
 	}
 	if ep.GQL == nil {
 		t.Fatal("expected an authenticated GraphQL client from the local auth helper")
+	}
+}
+
+/* The local workspace is whatever the helper scopes the session to; "quorum" is only the answer when it prints none. */
+func TestResolveLocalEndpointTakesTheWorkspaceFromTheHelper(t *testing.T) {
+	cmd := syncPushCmd
+	if err := cmd.Flags().Set("local-auth-cmd", `echo '{"Authorization": "Bearer L", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", "") })
+
+	ep, err := resolveLocalEndpoint(cmd)
+	if err != nil {
+		t.Fatalf("resolveLocalEndpoint: %v", err)
+	}
+	if ep.Workspace != "bc674142-782e-4fc3-aa79-585d12ff2d96" {
+		t.Fatalf("workspace %q, want the helper's X-Workspace-Id", ep.Workspace)
 	}
 }

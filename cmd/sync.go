@@ -143,26 +143,21 @@ func resolveRemoteEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	return sync.Endpoint{GQL: apiclient.New(endpoint, fresh.AccessToken), Workspace: workspace, Ref: serverURL}, nil
 }
 
-// resolveLocalEndpoint resolves the local MCP side. Its auth header comes from a
-// headers-helper command (the same mechanism .mcp.json uses), so we never need
-// to know how the local stack mints tokens.
+// resolveLocalEndpoint resolves the local MCP side. Its auth header and workspace come from a
+// headers-helper command (the same mechanism .mcp.json uses), so we never need to know how the
+// local stack mints tokens; --local-workspace overrides the helper's X-Workspace-Id.
 func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	url, _ := cmd.Flags().GetString("local-url")
 	if url == "" {
 		url = defaultLocalURL
 	}
+	headers, err := localCredentials(cmd, "")
+	if err != nil {
+		return sync.Endpoint{}, fmt.Errorf("local auth: %w", err)
+	}
 	workspace, _ := cmd.Flags().GetString("local-workspace")
 	if workspace == "" {
-		workspace = defaultLocalWorkspace
-	}
-	authCmdFlag, _ := cmd.Flags().GetString("local-auth-cmd")
-	authCmd, err := resolveAuthCmd(authCmdFlag, "")
-	if err != nil {
-		return sync.Endpoint{}, err
-	}
-	headers, err := runAuthHelper(authCmd)
-	if err != nil {
-		return sync.Endpoint{}, fmt.Errorf("local auth (%q): %w", authCmd, err)
+		workspace = firstNonEmpty(headers.Workspace, defaultLocalWorkspace)
 	}
 	endpoint := resolveGraphQLEndpointFor(cmd, url)
 	if endpoint == "" {
@@ -178,8 +173,8 @@ func init() {
 		c.Flags().String("remote-url", "", "Remote MCP server URL (default: active login)")
 		c.Flags().String("remote-workspace", "", "Remote workspace id (default: active workspace)")
 		c.Flags().String("local-url", defaultLocalURL, "Local MCP server URL")
-		c.Flags().String("local-workspace", defaultLocalWorkspace, "Local workspace id")
-		c.Flags().String("local-auth-cmd", "", "Command that prints local MCP auth headers as JSON (defaults to "+defaultLocalAuthCmd+" only inside a configured flmnt project)")
+		c.Flags().String("local-workspace", "", "Local workspace id (default: the helper's X-Workspace-Id, else "+defaultLocalWorkspace+")")
+		c.Flags().String("local-auth-cmd", "", "Command that prints local MCP auth headers as JSON (default: the flmnt entry's headersHelper in .mcp.json, else "+defaultLocalAuthCmd+" inside a configured flmnt project)")
 		c.Flags().String("cursor-file", "", "Path to the sync cursor file (default: ~/.filament/sync-cursors.json)")
 	}
 	syncCmd.AddCommand(syncPushCmd)
