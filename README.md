@@ -127,6 +127,21 @@ is asked; the broker's refusals (`LOCAL_APPROVAL_UNKNOWN`, `LOCAL_APPROVAL_EXPIR
 `LOCAL_APPROVAL_ALREADY_APPROVED`, `LOCAL_SUB_INVALID`, `LOCAL_CLIENT_INVALID`,
 `LOCAL_ADMIN_NOT_LOOPBACK`) are surfaced verbatim.
 
+**Converging on your cloud account (QRM-ADR-016).** `flmnt sync push` carries the local identity this
+machine holds as `attribution`: every record you wrote locally is written to the cloud workspace as
+the account you are logged in to (the sub from your hosted token; the tool's client id stays), while a
+teammate's `local_` records persist as written and you become their default notification target. The
+push needs both: the hosted login (`flmnt login`) and the identity (`flmnt login --local`, kept through
+logins and logouts); when a hosted login has swept the local token, it is minted again from the
+identity on the spot. `flmnt sync pull` writes the cloud copy exactly as it is; a record that exists in
+both places with different content or author is shown as a diff of the fields that differ and you
+answer `l` (keep yours) or `c` (take the cloud's) — or `--take local|cloud` for all, which a script
+needs, since no answer stops the pull before anything is written. The push's own echo (your record,
+now carrying your cloud sub) is reconciled silently. A record you keep is marked in
+`~/.filament/sync-marks.json` and your next push replaces its cloud copy (`replace`); the mark is then
+cleared. Counts are printed per stream: appended, skipped, re-attributed, reconciled, overwritten,
+kept, replaced.
+
 **Connecting to a teammate's harness.** When the approval page belongs to someone else's flmnt (behind
 their tunnel), the host's `approve` would otherwise sign you in as the HOST. Before they approve, run
 `flmnt local claim <code> --server-url <their PUBLIC_URL>` on your machine: the CLI asks their edge
@@ -209,9 +224,9 @@ flmnt proxy                      # run the local MCP proxy (injects Authorizatio
 flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.json headersHelper
 
 # Data
-flmnt sync push                  # sync local Quorum data up to the remote workspace
-flmnt sync pull                  # sync remote workspace data down to local
-                                 # the local side authenticates from the token `flmnt login --local` stores
+flmnt sync push                  # sync local data up to the remote workspace AS your cloud account (your local identity is re-attributed)
+flmnt sync pull [--take local|cloud]   # sync remote data down to local; each record that differs in both places is a diff you decide
+                                 # the local side authenticates from the token `flmnt login --local` stores, minted again from your identity when a hosted login swept it
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes

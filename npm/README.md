@@ -91,8 +91,8 @@ flmnt proxy                      # run the local MCP proxy (injects Authorizatio
 flmnt mcp auth-header            # print MCP auth headers as JSON for .mcp.json
 
 # Data
-flmnt sync push                  # sync local Quorum data up to the remote workspace
-flmnt sync pull                  # sync remote workspace data down to local
+flmnt sync push                  # sync local data up to the remote workspace AS your cloud account (your local identity is re-attributed)
+flmnt sync pull [--take local|cloud]   # sync remote data down to local; each record that differs in both places is a diff you decide
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + mistakes
