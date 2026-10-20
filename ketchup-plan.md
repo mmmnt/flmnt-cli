@@ -1,65 +1,48 @@
-# ketchup-plan — deterministic intent classification over captured prompts
+# ketchup-plan — the CLI works against the local harness without losing the hosted path
 
-Design: flmnt plan `a244bf6d`. Rulings `cc6a9636` (deterministic or it does not happen) and
-`ae838cfa` (design it now; ack list dropped).
+Founder directive: "catch the CLI up with the recent changes ... make sure the CLI work doesn't remove
+remote functionality, we need to extend local support. I think the CLI has some of that work already
+that can be extended."
 
-Consumer: `flmnt brief`. Nothing read a prompt label before this, and CLAUDE.md forbids a mechanism
-nothing can invoke — so the consumer lands in the same plan, not "later".
+Contract (quorum repo, 2026-10-19): `scripts/env.sh` resolves `local | localstack | aws`;
+`scripts/flmnt-cli.sh` runs the hooks' CLI with `QUORUM_SERVER_URL=http://localhost:8000/mcp` in
+`local`; `scripts/mcp-auth-header.sh` (the `.mcp.json` headersHelper) prints
+`{"Authorization":"Bearer <offline-minted RS256>","X-Workspace-Id":"<workspace>"}` in `local` and
+delegates to `flmnt mcp auth-header` in `aws`. The harness publishes ONLY `127.0.0.1:8000` (the MCP).
 
-Package `internal/intent`. Read-time only: the label is computed from stored text and never written
-into an entry. The log is append-only and burst 3/4 exist because version one of this rule was wrong
-on real sentences; a stamped label would be permanently wrong wherever the rule improves.
+What the CLI already had: `sync`'s local side runs a headers-helper (`runAuthHelper`) gated on a
+`.quorum.json`. Every other command authenticated from the keychain only, so against the harness it
+went quiet. The helper path becomes the shared local-credential path; the keychain/OAuth path is
+untouched and stays first for a non-loopback server.
 
-## DONE (c7bdc7c, ec00194, 011410b, a2595da, 684de79, 0dc8292, f147581)
-- [x] Burst 1: Sentences splits on terminal punctuation and numbered-list markers, dropping bare markers [depends: none]
-- [x] Burst 2: a sentence ending in "?" is an inquiry [depends: 1]
-- [x] Burst 3: an imperative opener beats an interrogative one, so "do it" is a directive [depends: 1]
-- [x] Burst 4: a subordinate opener without a terminal "?" is an assertion [depends: 2]
-- [x] Burst 5: anything else is an assertion [depends: 1]
-- [x] Burst 6: Labels reports the SET of a message's sentence labels [depends: 2,3,4,5]
-- [x] Burst 7: brief surfaces outstanding directives and inquiries from prompt.captured [depends: 6]
-- [x] Burst 8: FallThroughOpeners reports the openers the lexicon missed, by frequency [depends: 5]
+Actor constraint (coordinator, 2026-10-19): the helper's token carries the ACTOR — the harness mints
+sub=local-test-user-0001 for Claude Code's own client id, and every write is attributed from the
+router's X-Auth-Sub / X-Auth-Client. The CLI's hosted writes carry its own client id `flmnt-cli`, so
+the CLI must ask the helper for a token minted for `flmnt-cli`: it runs the helper with a client-id
+variable in its environment (shape pending the quorum side's confirmation of the exact name). No other
+client id is named anywhere in this repo.
 
-## Why each burst exists — all four numbers measured on the real 202-prompt corpus
+## Bursts
 
-- 41% of messages (82/202) carry MORE than one intent, so burst 6 returns a SET. A single label is
-  wrong two times in five however good the rule is.
-- Per sentence: assertion 283 (59%), directive 119 (25%), inquiry 78 (16%). Assertion is the biggest
-  class and is absent from the directive-vs-discovery framing entirely.
-- Burst 3 exists because `do` is both interrogative and imperative. Four corpus sentences are decided
-  by ordering alone and ALL FOUR are directives — `do it`, `do both.`, `do it when CI on main passes`,
-  `do not work in main`. `do it` is how this work was authorised; interrogative-first calls it a
-  question.
-- Burst 4 exists because 13 of 78 inquiries are subordinate clauses, not questions: "when you get
-  ready to push changes to billing, there's no CI hooked up".
-- Burst 1 drops bare markers because the numbered-list split promotes 20 of them ("2.", "3.") to
-  sentences.
-- Burst 8 exists because the imperative lexicon already leaked: "validate nothing is left over for
-  staging in AWS" was missed because `validate` was not in the list. An enumerated list that cannot
-  report its own gaps is the "gates sweep, never enumerate" failure mode; one that can is not.
+- [ ] Burst 1: `setup.HeadersHelper(dir)` reads the `flmnt` entry's headersHelper from `.mcp.json` [depends: none]
+- [ ] Burst 2: `isLoopback` names a loopback server URL (shared with `secureEndpoint`) [depends: none]
+- [ ] Burst 3: `health` probes the configured server's `/health`, names the environment it resolved, and probes core/engine/proxy only when CORE_URL / ENGINE_URL / QUORUM_PROXY_PORT are declared [depends: 2]
+- [ ] Burst 4: `setup` preserves a loopback `flmnt` entry that carries a headersHelper; a test round-trips quorum's `.mcp.json` shape [depends: 1,2]
+- [ ] Burst 5: `runAuthHelper` returns the helper's Authorization AND X-Workspace-Id, and runs the helper with the CLI's client id in its environment [depends: none]
+- [ ] Burst 6: the helper command resolves flag → `.mcp.json` headersHelper → the project-gated default [depends: 1]
+- [ ] Burst 7: `bestEffortBearer` tries the helper first on a loopback server and second elsewhere; `--auth-cmd` is a root persistent flag; helper output is memoized per command [depends: 2,5,6]
+- [ ] Burst 8: `workspace` commands authenticate through the same bearer path [depends: 7]
+- [ ] Burst 9: `whoami` decodes the helper's bearer on a loopback server instead of saying "Not logged in." [depends: 7]
+- [ ] Burst 10: on a loopback server the helper's workspace beats the machine-wide active workspace as the project fallback [depends: 7]
+- [ ] Burst 11: `sync --local-workspace` defaults to the helper's X-Workspace-Id, then the old "quorum" [depends: 5,6]
+- [ ] Burst 12: README documents the local path beside the remote one [depends: 1-11]
 
-The corpus is the founder's own transcripts and is NOT committed. Burst 8 is how the lexicon is
-checked against real data without the data entering the repo.
+## Left open (founder decisions — not guessed)
 
-## DONE
-
-## Verified against the real corpus, not a fixture
-
-`flmnt derive --intent` over 205 captured prompts / 470 sentences: directive 132, inquiry 69,
-assertion 269. Both target defects confirmed dead on real sentences — all four `do` sentences classify
-directive ("do it", "do both.", "do it when CI on main passes", "do not work in main"), and all three
-subordinate clauses classify assertion ("when you get ready to push changes to billing, there's no CI
-hooked up", "If they do, you go current immediately", "where is the team/org separation, spacing is
-off").
-
-THE GATE EARNED ITSELF ON ITS FIRST RUN. Of the whole fall-through tail, exactly two openers were
-verbs: `finish` (×2) and bare `let` (×2) — four directions filed as assertions because two words were
-missing, and `let's` was present while `let` was not. Both closed under test. Everything else in the
-tail is pronouns, articles, conjunctions and domain nouns.
-
-`flmnt brief` live against production surfaces the real thing:
-  Their recent directions:  - fix the response on the supersession guard.
-  Their recent questions:   - what do you mean that the RLM hosts a model?
-
-Known and left alone: the brief's "Recent decisions" still shows pre-rename prompt-decisions from
-before v1.10.8. That is the declined retroactivity (ruling cc6a9636), not a defect — they age out.
+- The harness publishes only the MCP (`:8000`); the router (`flmnt-router:4000/graphql`) is in-network
+  only and the MCP's discovery document 404s there, so every GraphQL command needs
+  `FILAMENT_GRAPHQL_ENDPOINT` (or `--graphql-endpoint`) pointing at a host-reachable router. Either the
+  compose publishes `127.0.0.1:4000` or the MCP proxies `/graphql`; that is a quorum-side change.
+- `setup --server-url <hosted>` inside a checkout whose `flmnt` entry is loopback + headersHelper keeps
+  that entry and says so. There is no flag to force the overwrite ("unless asked" is undefined).
+- The name of the client-id variable the CLI sets on the helper's environment (burst 5).
