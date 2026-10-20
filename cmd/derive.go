@@ -6,9 +6,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
-	"time"
 
-	"github.com/mmmnt/flmnt-cli/internal/auth"
 	"github.com/mmmnt/flmnt-cli/internal/derive"
 	"github.com/spf13/cobra"
 )
@@ -220,27 +218,6 @@ func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 		DryRun:    writerDry,
 		Log:       func(s string) { fmt.Fprintln(out, s) },
 	}, nil
-}
-
-// bestEffortBearer returns a fresh "Bearer <token>" if logged in to serverURL, else "" (local stack
-// needs no auth). Mirrors how `sync`/`mcp auth-header` mint the header.
-func bestEffortBearer(cmd *cobra.Command, serverURL string) string {
-	tokens, err := authHeaderLoadToken(serverURL)
-	if err != nil {
-		return ""
-	}
-	tokenURL, clientID, err := resolveOAuthEndpoint(cmd, serverURL)
-	if err != nil {
-		return ""
-	}
-	fresh, refreshed, err := auth.EnsureFreshAccessToken(tokens, tokenURL, clientID, accessTokenRefreshThreshold, time.Now())
-	if err != nil {
-		return ""
-	}
-	if refreshed {
-		_ = authHeaderStoreToken(serverURL, fresh)
-	}
-	return "Bearer " + fresh.AccessToken
 }
 
 func short8(s string) string {

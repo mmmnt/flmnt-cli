@@ -7,6 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
+	"github.com/spf13/cobra"
 )
 
 // The CLI's own registered client id — the one its hosted writes carry. A headers-helper mints the
@@ -56,4 +61,83 @@ func runAuthHelper(command string) (helperHeaders, error) {
 		return helperHeaders{}, fmt.Errorf("auth helper output has no Authorization header")
 	}
 	return h, nil
+}
+
+// helperRuns memoizes each helper command's answer for the life of the process: a mint costs
+// seconds, and one command asks for the bearer and again for the workspace.
+var helperRuns = map[string]helperRun{}
+
+type helperRun struct {
+	headers helperHeaders
+	err     error
+}
+
+// localCredentials resolves and runs the headers-helper for the working directory: --local-auth-cmd
+// (sync's local side) or the root --auth-cmd, else the checkout's .mcp.json entry, else the gated
+// default. dir "" is the working directory.
+func localCredentials(cmd *cobra.Command, dir string) (helperHeaders, error) {
+	flag, _ := cmd.Flags().GetString("local-auth-cmd")
+	if flag == "" {
+		flag, _ = cmd.Root().PersistentFlags().GetString("auth-cmd")
+	}
+	command, err := resolveAuthCmd(flag, dir)
+	if err != nil {
+		return helperHeaders{}, err
+	}
+	run, ok := helperRuns[command]
+	if !ok {
+		run.headers, run.err = runAuthHelper(command)
+		helperRuns[command] = run
+	}
+	return run.headers, run.err
+}
+
+// bestEffortBearer returns "Bearer <token>" for serverURL, or "" when no credential answers. For a
+// loopback server the checkout's headers-helper is the credential and is asked first, the keychain
+// second; for a hosted server the keychain `flmnt login` filled stays first and the helper is a
+// fallback. Nothing is ever substituted when neither answers.
+func bestEffortBearer(cmd *cobra.Command, serverURL string) string {
+	keychain := func() string { return keychainBearer(cmd, serverURL) }
+	helper := func() string {
+		h, err := localCredentials(cmd, "")
+		if err != nil {
+			return ""
+		}
+		return "Bearer " + h.Bearer
+	}
+	sources := []func() string{keychain, helper}
+	if httpx.IsLoopback(serverURL) {
+		sources = []func() string{helper, keychain}
+	}
+	for _, source := range sources {
+		if bearer := source(); bearer != "" {
+			return bearer
+		}
+	}
+	return ""
+}
+
+// keychainBearer returns a fresh "Bearer <token>" if logged in to serverURL, else "". Mirrors how
+// `sync`/`mcp auth-header` mint the header.
+func keychainBearer(cmd *cobra.Command, serverURL string) string {
+	tokens, err := authHeaderLoadToken(serverURL)
+	if err != nil {
+		return ""
+	}
+	tokenURL, clientID, err := resolveOAuthEndpoint(cmd, serverURL)
+	if err != nil {
+		return ""
+	}
+	fresh, refreshed, err := auth.EnsureFreshAccessToken(tokens, tokenURL, clientID, accessTokenRefreshThreshold, time.Now())
+	if err != nil {
+		return ""
+	}
+	if refreshed {
+		_ = authHeaderStoreToken(serverURL, fresh)
+	}
+	return "Bearer " + fresh.AccessToken
+}
+
+func init() {
+	rootCmd.PersistentFlags().String("auth-cmd", "", "command that prints MCP auth headers as JSON for a local server (default: the flmnt entry's headersHelper in .mcp.json)")
 }
