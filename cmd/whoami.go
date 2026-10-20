@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +28,7 @@ var whoamiCmd = &cobra.Command{
 			return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
 		}
 
-		tokens, err := authHeaderLoadToken(serverURL)
+		token, err := identityToken(cmd, serverURL)
 		if err != nil {
 			if errors.Is(err, auth.ErrNotFound) {
 				fmt.Fprintln(cmd.OutOrStdout(), "Not logged in.")
@@ -35,7 +36,7 @@ var whoamiCmd = &cobra.Command{
 			}
 			return err
 		}
-		claims, err := auth.DecodeUnverified(firstNonEmpty(tokens.IDToken, tokens.AccessToken))
+		claims, err := auth.DecodeUnverified(token)
 		if err != nil {
 			return fmt.Errorf("decoding token: %w", err)
 		}
@@ -48,6 +49,21 @@ var whoamiCmd = &cobra.Command{
 		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(identityOf(claims), cfg.ActiveWorkspaceName, pinned, pinnedName))
 		return nil
 	},
+}
+
+// identityToken is the token whose claims say who the session is: the helper's bearer on a loopback
+// server (the harness mints it for the person logged in), else the stored login's id token.
+func identityToken(cmd *cobra.Command, serverURL string) (string, error) {
+	if httpx.IsLoopback(serverURL) {
+		if h, err := localCredentials(cmd, ""); err == nil {
+			return h.Bearer, nil
+		}
+	}
+	tokens, err := authHeaderLoadToken(serverURL)
+	if err != nil {
+		return "", err
+	}
+	return firstNonEmpty(tokens.IDToken, tokens.AccessToken), nil
 }
 
 // runWhoamiJSON answers "who is logged in" for a machine: the stored login's claims, decoded offline.
