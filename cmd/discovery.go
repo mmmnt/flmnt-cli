@@ -60,8 +60,7 @@ func secureEndpoint(raw string) bool {
 	if u.Scheme == "https" {
 		return true
 	}
-	host := u.Hostname()
-	return u.Scheme == "http" && (host == "localhost" || host == "127.0.0.1" || host == "::1")
+	return u.Scheme == "http" && loopbackHost(u.Hostname())
 }
 
 func firstNonEmpty(vals ...string) string {
