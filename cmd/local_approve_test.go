@@ -242,3 +242,27 @@ func TestLocalApproveSurfacesEveryRefusalVerbatim(t *testing.T) {
 		}
 	}
 }
+
+/*
+A code a teammate claimed from their own machine (SPEC-LOCAL-007) is approved for THEM: the broker keeps
+
+	the claimant, and the prompt names the claimant rather than this machine's identity, so the host
+	knows who they are letting in.
+*/
+func TestLocalApproveNamesTheClaimantOfAClaimedCode(t *testing.T) {
+	stubLocalIdentity(t, identity.Identity{Sub: testLocalSub}, nil)
+	admin := pendingAuthorization()
+	admin.pendingBody = `{"kind":"authorization","client_id":"dcr-claude","client_name":"Claude","redirect_uri":"https://claude.ai/api/mcp/auth_callback","claimed_sub":"local_9e1c2b3a-4d5e-5f60-8a7b-1c2d3e4f5a6b"}`
+	base := admin.serve(t)
+
+	stdout, err := runLocalApprove(t, "y\n", "BCDF-GHJK", "--admin-url", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "for sub local_9e1c2b3a-4d5e-5f60-8a7b-1c2d3e4f5a6b (claimed from another machine") || strings.Contains(stdout, "for sub "+testLocalSub) {
+		t.Fatalf("the prompt must name the claimant, not this machine:\n%s", stdout)
+	}
+	if len(admin.approved) != 1 {
+		t.Fatalf("approvals posted: %d", len(admin.approved))
+	}
+}
