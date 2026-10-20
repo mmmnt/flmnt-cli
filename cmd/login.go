@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/localadmin"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,14 @@ var loginCmd = &cobra.Command{
 	Short: "Authenticate with flmnt via OAuth2 (browser PKCE, or --device for headless); --local declares the identity a local flmnt mints for",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if local, _ := cmd.Flags().GetBool("local"); local {
-			return runLocalLogin(cmd)
+			id, err := runLocalLogin(cmd)
+			if err != nil {
+				return err
+			}
+			// The server is resolved the way every other command resolves it (flag, env, .quorum.json,
+			// the login config) so standing in a configured checkout is enough.
+			adminURL, _ := cmd.Flags().GetString("admin-url")
+			return runLocalToken(cmd, id, resolveAuthServerURL(cmd), adminURL)
 		}
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		if serverURL == "" {
@@ -121,5 +129,6 @@ func init() {
 	loginCmd.Flags().Bool("device", false, "Use the device-authorization grant (headless, no browser)")
 	loginCmd.Flags().String("device-url", "", "Device-authorization endpoint (with --device)")
 	loginCmd.Flags().Bool("local", false, "record the local login (derived from this machine and the OS user) that a local flmnt mints credentials for")
+	loginCmd.Flags().String("admin-url", localadmin.DefaultBaseURL, "with --local: the local broker's admin listener the CLI approves its own device code through")
 	rootCmd.AddCommand(loginCmd)
 }
