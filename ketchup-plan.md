@@ -54,3 +54,17 @@ the registered OAuth client). Plain whoami says "local identity <sub>". The CLI 
 - CLOSED (founder): setup overrides the `flmnt` key no matter what.
 - CLOSED: the helper takes the LAST `--client`, so the CLI appends its own and parses nothing.
 - CLOSED (founder): hosted `whoami --json --client` reports the registered OAuth client id as is.
+
+## Bottle 5.3 — the helper retires (QRM-ADR-015 §1, §6)
+
+quorum's `scripts/mcp-auth-header.sh` is gone and `.mcp.json` is url-only, local and hosted alike. The
+CLI's harness credential is the keychain token `flmnt login --local` stores (Bottle 5.2), read exactly
+as the hosted login's; nothing runs a helper any more.
+
+- [x] Burst 19: `bestEffortBearer` reads the keychain only, for a loopback server too [depends: 7]
+- [x] Burst 20: a server with no stored token is refused with the login that fills it — `flmnt login --local --server-url <server>` for the harness [depends: 19]
+- [x] Burst 21: `sync`'s local side authenticates from the keychain; `--local-auth-cmd` goes; `--local-workspace` defaults to "quorum" [depends: 19,20]
+- [x] Burst 22: `health` on a loopback server reports the stored local token (who it is for, or the refusal) instead of running the helper [depends: 20]
+- [x] Burst 23: the project chain is the same on every server — flag, repo pin, active workspace; `helperWorkspace` goes [depends: 11]
+- [x] Burst 24: `runAuthHelper`, `localCredentials`, `--auth-cmd`, `resolveAuthCmd`, `setup.FlmntEntry` removed [depends: 19-23]
+- [x] Burst 25: the url-only `.mcp.json` entry is asserted for both environments; README/npm README no longer name a helper [depends: 24]

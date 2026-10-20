@@ -5,7 +5,7 @@
 #   make build && ./flmnt version
 #   make test
 #
-# To make `flmnt` on your PATH (and the .mcp.json headersHelper) use the dev build:
+# To make `flmnt` on your PATH (and the Claude Code hooks) use the dev build:
 #   make install      # -> $(go env GOPATH)/bin/flmnt  (ensure ~/go/bin precedes your node bin on PATH)
 #   make uninstall    # then the released npm/brew `flmnt` resolves again
 

@@ -13,8 +13,8 @@ import (
 var Client = &http.Client{Timeout: 10 * time.Second}
 
 // IsLoopback says whether a server URL names this machine — the local harness rather than a hosted
-// flmnt. Credentials for a loopback server come from the checkout's headers-helper; for anything else
-// the keychain `flmnt login` filled is consulted first.
+// flmnt. The credential is the keychain token either way; what differs is the login that stores it
+// (`flmnt login --local` for the harness) and how a client's sign-in is approved there.
 func IsLoopback(serverURL string) bool {
 	u, err := url.Parse(serverURL)
 	if err != nil {

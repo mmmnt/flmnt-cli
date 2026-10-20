@@ -42,13 +42,13 @@ A local flmnt mints credentials for a declared person, never for a default, and 
 
 ```sh
 flmnt login --local                      # once per machine and OS user — no input, no email
-flmnt whoami --json --client flmnt-cli   # {"sub","workspace","client_id"} — what a headers-helper asks
+flmnt whoami --json --client flmnt-cli   # {"sub","workspace","client_id"} — the identity as one JSON object
 flmnt logout --local                     # end the local login
 ```
 
 `login --local` derives the identity from a marker the machine already carries (macOS `IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user: `sub = "local_" + UUIDv5(marker + OS user)`, and per tool `client_id = "local_" + UUIDv5(sub, tool)`. Only the digest is kept (`~/.filament/local-identity.json`); the same machine and user give the same sub forever, and two people or two machines never collide. No login, on either side, prints nothing on stdout, one reason on stderr, and exits 1.
 
-On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`, `workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper (the `headersHelper` of the `flmnt` entry in `.mcp.json`, the same command Claude Code runs), with `--client flmnt-cli` appended so its writes are attributed to the CLI. A helper that refuses is "not configured": its reason is shown verbatim, nothing is substituted. The GraphQL endpoint of a local server comes from `local_graphql_endpoint` in the checkout's `.quorum.json` (`FILAMENT_GRAPHQL_ENDPOINT` overrides it); `flmnt setup` carries that field through. `flmnt health` names the environment it resolved and probes that server's `/health`, plus Core/Engine/proxy only when `CORE_URL` / `ENGINE_URL` / `QUORUM_PROXY_PORT` are set.
+Every command — `brief`, `gate`, `derive`, `record-*`, `workspace`, `sync`'s local side — authenticates from the keychain token stored under the server URL it resolves: `flmnt login` stores it for a hosted flmnt, `flmnt login --local` for the harness (the device grant as `flmnt-cli`, approved by the CLI itself over the broker's loopback admin listener). A server with no stored token is refused as ``not logged in to <server>: run `flmnt login --local --server-url <server>` `` (or `flmnt login` for a hosted one); nothing is substituted. The `.mcp.json` entry `flmnt setup` writes is url-only in both environments. The GraphQL endpoint of a local server comes from `local_graphql_endpoint` in the checkout's `.quorum.json` (`FILAMENT_GRAPHQL_ENDPOINT` overrides it); `flmnt setup` carries that field through. `flmnt health` names the environment it resolved, probes that server's `/health`, reports the local token on a loopback server, and probes Core/Engine/proxy only when `CORE_URL` / `ENGINE_URL` / `QUORUM_PROXY_PORT` are set.
 
 ### Which workspace a command uses
 
@@ -72,7 +72,7 @@ flmnt login --local              # a local flmnt: derive this machine's identity
 flmnt logout                     # sign out and revoke local credentials
 flmnt logout --local             # end the local login
 flmnt whoami                     # show your identity and which workspace is in force here
-flmnt whoami --json [--client <tool>]   # {"sub","workspace","client_id"?} for a headers-helper
+flmnt whoami --json [--client <tool>]   # {"sub","workspace","client_id"?} as one JSON object
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of

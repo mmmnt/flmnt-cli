@@ -83,7 +83,7 @@ unchanged: credentials come from the keychain `flmnt login` filled.
 ```sh
 flmnt login --local                           # once per machine and OS user — no input; also obtains the CLI's own local token
 flmnt local approve <code>                    # approve a client's pending sign-in (claude.ai, Claude Code) for the local login
-flmnt whoami --json --client flmnt-cli        # what a local headers-helper asks
+flmnt whoami --json --client flmnt-cli        # the identity as one JSON object, with the client id derived for a tool
 flmnt logout --local                          # end the local login
 ```
 
@@ -121,18 +121,14 @@ loopback server whose OAuth discovery advertises a device grant, the CLI runs th
 then stores the token under the server URL as any login does. Otherwise the login is recorded as
 before and the token step says it was skipped and why.
 
-**Credentials.** On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`,
-`workspace`, `sync`'s local side — authenticates through the checkout's own headers-helper: the
-`headersHelper` on the `flmnt` entry in `.mcp.json`, the same command Claude Code runs for that
-server. The CLI runs it with `--client flmnt-cli` appended (the helper takes the last `--client`, so
-the entry's own declaration for Claude Code does not apply), so the helper mints for the client id
-derived for the CLI and its writes are attributed to it. The helper prints `{"Authorization":"Bearer …","X-Workspace-Id":"…"}`;
-the workspace is the session's project when the repo has no pin, and `sync`'s `--local-workspace`
-default. A helper that refuses is "not configured": its reason is surfaced verbatim, nothing is
-substituted, and `flmnt health` shows it. `--auth-cmd <command>` names a helper explicitly; without
-one and without a `.mcp.json` entry, the repo-relative `bash scripts/mcp-auth-header.sh` runs only
-inside a configured repo (a `.quorum.json`). On a hosted server the helper is consulted only when no
-login is stored.
+**Credentials.** Every command — `brief`, `gate`, `derive`, `record-*`, `workspace`, `sync`'s local
+side — authenticates from the keychain token stored under the server URL it resolves: the one
+`flmnt login` stores for a hosted flmnt, the one `flmnt login --local` stores for the harness. There
+is no other source: a server with no stored token is refused as ``not logged in to <server>: run
+`flmnt login --local --server-url <server>` `` (or `flmnt login` for a hosted one), nothing is
+substituted, and `flmnt health` reports the local token — who it is for, or that same refusal. The
+`.mcp.json` entry `flmnt setup` writes is url-only in both environments: `{"type":"http","url":"<server>"}`,
+no headers, and the client runs the OAuth flow the MCP advertises.
 
 A local server has no OAuth discovery to advertise its router, so the checkout declares it in
 `.quorum.json` as `"local_graphql_endpoint": "http://localhost:4000/graphql"`; on a loopback server
@@ -166,7 +162,7 @@ flmnt login --local              # record the local login (derived from this mac
 flmnt logout                     # sign out and revoke local credentials
 flmnt logout --local             # remove the local login
 flmnt whoami                     # show your identity and which workspace is in force here
-flmnt whoami --json [--client <tool>]   # the identity as JSON for a local headers-helper (exit 1 when not logged in)
+flmnt whoami --json [--client <tool>]   # the identity as one JSON object (exit 1 when not logged in)
 
 # Local harness
 flmnt local approve <code> [--yes] [--admin-url <url>]   # approve a client's pending sign-in on the local broker for the local login
@@ -192,7 +188,7 @@ flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.j
 # Data
 flmnt sync push                  # sync local Quorum data up to the remote workspace
 flmnt sync pull                  # sync remote workspace data down to local
-                                 # the local side authenticates through the checkout's headers-helper
+                                 # the local side authenticates from the token `flmnt login --local` stores
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes
@@ -210,7 +206,7 @@ flmnt corpus --project platform --out training   # …from another workspace you
 flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start
 
 # Utilities
-flmnt health                     # probe the configured server's /health (local or hosted) and, locally, the headers-helper
+flmnt health                     # probe the configured server's /health (local or hosted) and, locally, the stored local token
 flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook
 flmnt dashboard                  # open the dashboard in a browser
 flmnt version                    # print the version
