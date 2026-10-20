@@ -93,10 +93,7 @@ a loopback host — `http://localhost:8000/mcp` — is local, anything else is h
   `--graphql-endpoint`) at its router when the GraphQL endpoint is not advertised.
 
 `brief`, `gate`, `derive`, `record-*`, `whoami`, `workspace` and `sync`'s local side all take this path.
-`flmnt whoami --json` is the other direction: it prints the stored login's claims
-(`{"sub","email","username","workspace"}`) decoded offline, which is how a local helper learns who
-to mint for; not logged in → nothing on stdout, the reason on stderr, exit 1. `flmnt setup` leaves a
-loopback `flmnt` entry that carries a `headersHelper` as it is.
+`flmnt setup` leaves a loopback `flmnt` entry that carries a `headersHelper` as it is.
 
 ### Which workspace a command uses
 
@@ -120,7 +117,6 @@ flmnt <command> -h               # detailed help for a command
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
 flmnt logout                     # sign out and revoke local credentials
 flmnt whoami                     # show your identity and which workspace is in force here
-flmnt whoami --json              # the stored login's claims as JSON, for a local headers-helper (exit 1 when not logged in)
 
 # Workspaces
 flmnt workspace list             # list workspaces you own or are a member of
