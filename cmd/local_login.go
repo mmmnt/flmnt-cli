@@ -17,9 +17,10 @@ var (
 	identityLoad   = identity.Load
 )
 
-// runLocalLogin records the LOCAL LOGIN with no input: the marker the host machine already carries
-// and the OS user, digested to the sub a local flmnt mints for. Only the digest is written; a machine
-// with no readable marker is refused and an identity is never invented.
+// runLocalLogin records the LOCAL LOGIN with no input: the identity the machine already holds, or on
+// the first login the marker the host machine carries and the OS user, digested to the sub a local
+// flmnt mints for. Only the digest is written; a machine with no readable marker is refused and an
+// identity is never invented.
 //
 // It is also THE login from here on: the session config records the local kind and the loopback
 // server it is for (--server-url / QUORUM_SERVER_URL when they name one, else the harness default),
@@ -31,17 +32,9 @@ func runLocalLogin(cmd *cobra.Command) error {
 	if !httpx.IsLoopback(serverURL) {
 		return fmt.Errorf("local login refused: %s is not a loopback server (a local login is for a local flmnt; `flmnt login` signs in to a hosted one)", serverURL)
 	}
-	marker, err := identityMarker()
+	id, err := recordedOrDerivedIdentity()
 	if err != nil {
-		return fmt.Errorf("local login refused: %w", err)
-	}
-	osUser, err := identityOSUser()
-	if err != nil {
-		return fmt.Errorf("local login refused: %w", err)
-	}
-	id := identity.Derive(marker, osUser)
-	if err := identitySave(id); err != nil {
-		return fmt.Errorf("recording the local login: %w", err)
+		return err
 	}
 	cleared, err := loginDeleteAllTokens()
 	if err != nil {
@@ -59,6 +52,29 @@ func runLocalLogin(cmd *cobra.Command) error {
 		fmt.Fprintf(out, "The hosted login was cleared (%s): one login at a time.\n", joinComma(origins))
 	}
 	return runLocalToken(cmd, id, session, flagString(cmd, "admin-url"))
+}
+
+// recordedOrDerivedIdentity is the identity the machine already holds, or — on the first local login
+// — the one derived from its marker and the OS user and recorded. The file is the identity from
+// then on: a login never re-derives over it, so the sub a machine answers with never changes
+// underneath its records.
+func recordedOrDerivedIdentity() (identity.Identity, error) {
+	if id, err := identityLoad(); err == nil {
+		return id, nil
+	}
+	marker, err := identityMarker()
+	if err != nil {
+		return identity.Identity{}, fmt.Errorf("local login refused: %w", err)
+	}
+	osUser, err := identityOSUser()
+	if err != nil {
+		return identity.Identity{}, fmt.Errorf("local login refused: %w", err)
+	}
+	id := identity.Derive(marker, osUser)
+	if err := identitySave(id); err != nil {
+		return identity.Identity{}, fmt.Errorf("recording the local login: %w", err)
+	}
+	return id, nil
 }
 
 // runLocalToken obtains the CLI's OWN credential from the local flmnt once the login is recorded: the

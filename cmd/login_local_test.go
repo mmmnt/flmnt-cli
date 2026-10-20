@@ -21,18 +21,22 @@ func runLogin(t *testing.T, args ...string) (stdout string, err error) {
 
 const testMarker = "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
 
-// stubLocalLoginSeams gives the login a machine (marker + OS user) and a recorder for the login file,
-// on top of stubLoginSeams: discovery answers an empty document, so the token step is skipped unless
-// a test stubs discovery itself, and nothing reaches the network or the real keychain.
+// stubLocalLoginSeams gives the login a machine (marker + OS user) with NO identity recorded yet and a
+// recorder for the login file, on top of stubLoginSeams: discovery answers an empty document, so the
+// token step is skipped unless a test stubs discovery itself, and nothing reaches the network, the
+// real keychain or the real ~/.filament.
 func stubLocalLoginSeams(t *testing.T) *identity.Identity {
 	t.Helper()
 	stubLoginSeams(t)
-	origMarker, origUser, origSave := identityMarker, identityOSUser, identitySave
+	origMarker, origUser, origSave, origLoad := identityMarker, identityOSUser, identitySave, identityLoad
 	identityMarker = func() (string, error) { return testMarker, nil }
 	identityOSUser = func() (string, error) { return "mike", nil }
+	identityLoad = func() (identity.Identity, error) { return identity.Identity{}, identity.ErrNotFound }
 	saved := &identity.Identity{}
 	identitySave = func(i identity.Identity) error { *saved = i; return nil }
-	t.Cleanup(func() { identityMarker, identityOSUser, identitySave = origMarker, origUser, origSave })
+	t.Cleanup(func() {
+		identityMarker, identityOSUser, identitySave, identityLoad = origMarker, origUser, origSave, origLoad
+	})
 	return saved
 }
 
@@ -393,5 +397,34 @@ func TestLoginLocalFailsTheTokenStepWithTheBrokersRefusal(t *testing.T) {
 	}
 	if stores != 0 {
 		t.Fatal("no token may be stored after a refused approval")
+	}
+}
+
+/*
+The identity is recorded once and reused ever after: a machine that already holds one logs in with
+THAT sub, whatever the marker derives today — the file is the identity (identity.Load never
+re-derives), so a later salted identity has one and the same path. Nothing is re-saved.
+*/
+func TestLoginLocalReusesTheRecordedIdentity(t *testing.T) {
+	saved := stubLocalLoginSeams(t)
+	deviceFlowNeverRuns(t)
+	t.Setenv("HOME", t.TempDir())
+	identityLoad = identity.Load
+	recorded := identity.Derive("ANOTHER-MARKER", "mike")
+	if err := identity.Save(recorded); err != nil {
+		t.Fatal(err)
+	}
+	var session auth.CLIConfig
+	loginSaveConfig = func(c auth.CLIConfig) error { session = c; return nil }
+
+	stdout, err := runLogin(t, "--local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Sub != "" {
+		t.Errorf("an identity the machine already holds is not re-saved; saved %+v", *saved)
+	}
+	if session.Sub != recorded.Sub || !strings.Contains(stdout, recorded.Sub) {
+		t.Errorf("the session and the output must carry the recorded sub %s; got %+v %q", recorded.Sub, session, stdout)
 	}
 }
