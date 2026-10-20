@@ -33,8 +33,14 @@ var localApproveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		tool := firstNonEmpty(pending.ClientName, pending.ClientID)
-		what := fmt.Sprintf("%s (%s) for sub %s", tool, pending.RedirectURI, id.Sub)
+		// The tool whose client id is derived: a web client is named by the broker (its registered name,
+		// else its client id); a device code is the CLI's own sign-in, so the CLI's tool name.
+		tool, what, done := cliTool, "this machine's flmnt CLI device sign-in", "Approved."
+		if pending.Kind == "authorization" {
+			tool = firstNonEmpty(pending.ClientName, pending.ClientID)
+			what = fmt.Sprintf("%s (%s) for sub %s", tool, pending.RedirectURI, id.Sub)
+			done = "Approved. Return to your browser."
+		}
 		if yes, _ := cmd.Flags().GetBool("yes"); yes {
 			fmt.Fprintf(cmd.OutOrStdout(), "Approving %s.\n", what)
 		} else if !confirm(cmd, "Approve "+what+"?") {
@@ -44,7 +50,7 @@ var localApproveCmd = &cobra.Command{
 		if err := localAdminApprove(adminURL, code, id.Sub, id.ClientID(tool)); err != nil {
 			return err
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), "Approved. Return to your browser.")
+		fmt.Fprintln(cmd.OutOrStdout(), done)
 		return nil
 	},
 }

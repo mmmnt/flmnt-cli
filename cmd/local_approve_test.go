@@ -160,3 +160,30 @@ func TestLocalApproveYesSkipsThePrompt(t *testing.T) {
 		t.Fatalf("--yes must not ask: %q", stdout)
 	}
 }
+
+/*
+A device user code is the CLI's own sign-in (`flmnt login --local` runs the device grant as
+
+	`flmnt-cli`), so the client id is the one derived for the CLI tool — not for the broker's device
+	client id — and the question names this machine's CLI, not a redirect.
+*/
+func TestLocalApproveApprovesADeviceCodeForTheCLITool(t *testing.T) {
+	id := identity.Identity{Sub: testLocalSub}
+	stubLocalIdentity(t, id, nil)
+	admin := &adminFixture{pendingStatus: 200, pendingBody: `{"kind":"device","client_id":"flmnt-cli"}`, approveStatus: 200, approveBody: `{"status":"approved"}`}
+	base := admin.serve(t)
+
+	stdout, err := runLocalApprove(t, "y\n", "LMNP-QRST", "--admin-url", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(admin.approved) != 1 || admin.approved[0]["client_id"] != id.ClientID("flmnt-cli") || admin.approved[0]["sub"] != testLocalSub || admin.approved[0]["code"] != "LMNP-QRST" {
+		t.Fatalf("posted %v; want the client id derived for flmnt-cli (%s)", admin.approved, id.ClientID("flmnt-cli"))
+	}
+	if !strings.Contains(stdout, "Approve this machine's flmnt CLI device sign-in?") {
+		t.Fatalf("stdout: %q", stdout)
+	}
+	if !strings.Contains(stdout, "Approved.") || strings.Contains(stdout, "Return to your browser") {
+		t.Fatalf("a device approval has no browser to return to: %q", stdout)
+	}
+}
