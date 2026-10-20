@@ -163,3 +163,63 @@ func TestLoginLocalObtainsTheCLITokenByApprovingItself(t *testing.T) {
 		t.Fatalf("nobody is sent to a browser: %q", stdout)
 	}
 }
+
+/*
+The token step is a convenience on top of the login, never a condition of it: with no server, a hosted
+
+	server, or a server that advertises no device grant, the login is recorded and printed as before,
+	and the step says it was skipped and why. The device grant is not attempted.
+*/
+func TestLoginLocalSkipsTheTokenStepWithItsReason(t *testing.T) {
+	for name, tc := range map[string]struct {
+		args     []string
+		discover func(string) (oauthDiscovery, error)
+		reason   string
+	}{
+		"no server url": {
+			reason: "no server URL resolved",
+		},
+		"a hosted server": {
+			args:   []string{"--server-url", "https://mcp.production.flmnt.ai/mcp"},
+			reason: "https://mcp.production.flmnt.ai/mcp is not a local server",
+		},
+		"discovery fails": {
+			args:     []string{"--server-url", "http://localhost:8000/mcp"},
+			discover: func(string) (oauthDiscovery, error) { return oauthDiscovery{}, errors.New("connection refused") },
+			reason:   "OAuth discovery at http://localhost:8000/mcp failed: connection refused",
+		},
+		"no device grant advertised": {
+			args: []string{"--server-url", "http://localhost:8000/mcp"},
+			discover: func(string) (oauthDiscovery, error) {
+				return oauthDiscovery{TokenEndpoint: "http://localhost:4010/token"}, nil
+			},
+			reason: "advertises no device_authorization_endpoint",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			saved := stubLocalLoginSeams(t)
+			deviceFlowNeverRuns(t)
+			if tc.discover != nil {
+				loginDiscover = tc.discover
+			}
+			stores := 0
+			origStore := loginStoreToken
+			loginStoreToken = func(string, auth.TokenSet) error { stores++; return nil }
+			t.Cleanup(func() { loginStoreToken = origStore })
+
+			stdout, err := runLogin(t, append([]string{"--local"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("a skipped token step must not fail the login: %v", err)
+			}
+			if saved.Sub == "" || !strings.Contains(stdout, saved.Sub) {
+				t.Fatalf("the login must still be recorded and printed: %+v %q", saved, stdout)
+			}
+			if !strings.Contains(stdout, "Token step skipped: ") || !strings.Contains(stdout, tc.reason) {
+				t.Fatalf("stdout lacks the reason %q:\n%s", tc.reason, stdout)
+			}
+			if stores != 0 {
+				t.Fatal("nothing may be stored when the step is skipped")
+			}
+		})
+	}
+}
