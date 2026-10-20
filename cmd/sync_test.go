@@ -55,7 +55,7 @@ func TestResolveAuthCmdReadsTheCheckoutsHeadersHelper(t *testing.T) {
 }
 
 func TestRunAuthHelperExtractsAuthorizationAndWorkspace(t *testing.T) {
-	got, err := runAuthHelper(`echo '{"Authorization": "Bearer LOCALTOK", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`)
+	got, err := runAuthHelper(helper(`echo '{"Authorization": "Bearer LOCALTOK", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`))
 	if err != nil {
 		t.Fatalf("runAuthHelper: %v", err)
 	}
@@ -68,36 +68,37 @@ func TestRunAuthHelperExtractsAuthorizationAndWorkspace(t *testing.T) {
 }
 
 func TestRunAuthHelperErrorsWhenNoAuthorizationHeader(t *testing.T) {
-	if _, err := runAuthHelper(`echo '{"X-Workspace-Id": "quorum"}'`); err == nil {
+	if _, err := runAuthHelper(helper(`echo '{"X-Workspace-Id": "quorum"}'`)); err == nil {
 		t.Fatal("expected error when no Authorization header present")
 	}
 }
 
 func TestRunAuthHelperErrorsOnNonJSON(t *testing.T) {
-	if _, err := runAuthHelper(`echo not-json`); err == nil {
+	if _, err := runAuthHelper(helper(`echo not-json`)); err == nil {
 		t.Fatal("expected error on non-JSON helper output")
 	}
 }
 
 /*
-The helper's token carries the ACTOR, and the harness attributes every write from it. Claude Code's
+The helper's token carries the ACTOR and the CLIENT, and the harness attributes every write from them.
 
-	entry mints for its own client id; the CLI must be minted for ITS registered client id — the one
-	its hosted writes carry — or local entries read as Claude Code's. Founder ruling 2026-10-19.
+	The CLI names its own tool to the helper — `--client flmnt-cli` — which asks `flmnt whoami --json
+	--client flmnt-cli` and mints for the client id derived for this person; without it the local
+	credential would be Claude Code's and every entry the CLI writes would read as Claude Code's.
 */
-func TestRunAuthHelperDeclaresTheCLIsClientIDToTheHelper(t *testing.T) {
-	got, err := runAuthHelper(`printf '{"Authorization": "Bearer %s"}' "$BROKER_CLIENT_ID"`)
+func TestRunAuthHelperNamesTheCLIsToolToTheHelper(t *testing.T) {
+	got, err := runAuthHelper(`f() { printf '{"Authorization": "Bearer %s:%s"}' "$1" "$2"; }; f`)
 	if err != nil {
 		t.Fatalf("runAuthHelper: %v", err)
 	}
-	if got.Bearer != "flmnt-cli" {
-		t.Fatalf("the helper saw BROKER_CLIENT_ID=%q, want flmnt-cli", got.Bearer)
+	if got.Bearer != "--client:flmnt-cli" {
+		t.Fatalf("the helper saw %q, want --client flmnt-cli as its arguments", got.Bearer)
 	}
 }
 
 /* The helper refuses with a reason when the identity is not declared; that reason is the error, not a default. */
 func TestRunAuthHelperCarriesTheHelpersReason(t *testing.T) {
-	_, err := runAuthHelper(`echo 'mint-token: no identity declared — run flmnt login' >&2; exit 1`)
+	_, err := runAuthHelper(helper(`echo 'mint-token: no identity declared — run flmnt login' >&2; exit 1`))
 	if err == nil {
 		t.Fatal("expected the helper's refusal to be an error")
 	}
@@ -148,7 +149,7 @@ func TestResolveRemoteServerURLPrefersRemoteURLFlag(t *testing.T) {
 
 func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
 	cmd := syncPushCmd
-	if err := cmd.Flags().Set("local-auth-cmd", `echo '{"Authorization": "Bearer L"}'`); err != nil {
+	if err := cmd.Flags().Set("local-auth-cmd", helper(`echo '{"Authorization": "Bearer L"}'`)); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", "") })
@@ -168,7 +169,7 @@ func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
 /* The local workspace is whatever the helper scopes the session to; "quorum" is only the answer when it prints none. */
 func TestResolveLocalEndpointTakesTheWorkspaceFromTheHelper(t *testing.T) {
 	cmd := syncPushCmd
-	if err := cmd.Flags().Set("local-auth-cmd", `echo '{"Authorization": "Bearer L", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`); err != nil {
+	if err := cmd.Flags().Set("local-auth-cmd", helper(`echo '{"Authorization": "Bearer L", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`)); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", "") })

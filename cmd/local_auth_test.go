@@ -35,11 +35,14 @@ func stubHelper(t *testing.T, command string) {
 	t.Cleanup(func() { _ = rootCmd.PersistentFlags().Set("auth-cmd", "") })
 }
 
+// helper wraps a fixture so the `--client flmnt-cli` the CLI appends is received, not echoed.
+func helper(body string) string { return "f() { " + body + "; }; f" }
+
 // A helper that is unique per test, so the per-command memo never bleeds between tests.
 func helperPrinting(t *testing.T, bearer string) string {
 	t.Helper()
 	marker := filepath.Join(t.TempDir(), "runs")
-	return fmt.Sprintf(`echo run >> %q; echo '{"Authorization":"Bearer %s","X-Workspace-Id":"ws-local"}'`, marker, bearer)
+	return helper(fmt.Sprintf(`echo run >> %q; echo '{"Authorization":"Bearer %s","X-Workspace-Id":"ws-local"}'`, marker, bearer))
 }
 
 /*
@@ -81,7 +84,7 @@ func TestBestEffortBearerFallsBackToTheHelperForAHostedServerWithoutALogin(t *te
 /* A loopback server whose helper refuses falls back to the keychain, then to nothing — never a default. */
 func TestBestEffortBearerIsEmptyWhenNeitherSourceAnswers(t *testing.T) {
 	stubKeychain(t, "", auth.ErrNotFound)
-	stubHelper(t, fmt.Sprintf(`echo 'no identity declared %s' >&2; exit 1`, t.TempDir()))
+	stubHelper(t, helper(fmt.Sprintf(`echo 'no identity declared %s' >&2; exit 1`, t.TempDir())))
 
 	if got := bestEffortBearer(briefCmd, "http://localhost:8000/mcp"); got != "" {
 		t.Fatalf("got %q, want empty", got)
@@ -91,7 +94,7 @@ func TestBestEffortBearerIsEmptyWhenNeitherSourceAnswers(t *testing.T) {
 /* The helper costs seconds (it mints); one command runs it once however many callers ask. */
 func TestHelperOutputIsMemoizedPerCommand(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "runs")
-	stubHelper(t, fmt.Sprintf(`echo run >> %q; echo '{"Authorization":"Bearer T","X-Workspace-Id":"ws-local"}'`, marker))
+	stubHelper(t, helper(fmt.Sprintf(`echo run >> %q; echo '{"Authorization":"Bearer T","X-Workspace-Id":"ws-local"}'`, marker)))
 
 	for range 3 {
 		if _, err := localCredentials(briefCmd, ""); err != nil {

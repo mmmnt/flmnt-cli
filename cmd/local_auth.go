@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,13 +13,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The CLI's own registered client id — the one its hosted writes carry. A headers-helper mints the
-// local credential for the client id it is given, so the CLI declares its own; without this the local
-// token would be Claude Code's and every entry the CLI writes would be attributed to Claude Code.
-const (
-	cliClientID       = "flmnt-cli"
-	helperClientIDVar = "BROKER_CLIENT_ID"
-)
+// cliTool is the name the CLI gives a headers-helper for its own credential (`--client flmnt-cli`);
+// the helper derives this person's client id for that tool through `flmnt whoami --json --client`.
+// Without it the local token would be Claude Code's and every entry the CLI writes would be
+// attributed to Claude Code.
+const cliTool = "flmnt-cli"
 
 // helperHeaders is what a headers-helper prints: the bearer (without the "Bearer " prefix) and the
 // workspace it scopes the session to, when it prints one.
@@ -29,12 +26,12 @@ type helperHeaders struct {
 	Workspace string
 }
 
-// runAuthHelper runs a headers-helper command (the same mechanism .mcp.json uses) and reads the
-// Authorization and X-Workspace-Id headers from its JSON stdout. A helper that refuses exits non-zero
-// with its reason on stderr; that reason is the error, and nothing is substituted for it.
+// runAuthHelper runs a headers-helper command (the same mechanism .mcp.json uses) for the CLI's own
+// tool and reads the Authorization and X-Workspace-Id headers from its JSON stdout. A helper that
+// refuses exits non-zero with its reason on stderr; that reason is the error, and nothing is
+// substituted for it.
 func runAuthHelper(command string) (helperHeaders, error) {
-	c := exec.Command("sh", "-c", command)
-	c.Env = append(os.Environ(), helperClientIDVar+"="+cliClientID)
+	c := exec.Command("sh", "-c", command+" --client "+cliTool)
 	var stderr bytes.Buffer
 	c.Stderr = &stderr
 	out, err := c.Output()

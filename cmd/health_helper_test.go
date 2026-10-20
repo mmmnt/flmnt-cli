@@ -21,7 +21,7 @@ func TestHealthReportsTheHelperOnALoopbackServer(t *testing.T) {
 }
 
 func TestHealthSurfacesTheHelpersReason(t *testing.T) {
-	stubHelper(t, "echo 'mint-token: no identity declared — run flmnt login "+t.TempDir()+"' >&2; exit 1")
+	stubHelper(t, helper("echo 'mint-token: no identity declared — run flmnt login "+t.TempDir()+"' >&2; exit 1"))
 
 	r := helperResult(healthCmd)
 	if r.OK || !strings.Contains(r.Message, "no identity declared") {

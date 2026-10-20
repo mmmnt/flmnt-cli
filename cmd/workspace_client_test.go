@@ -45,7 +45,7 @@ func TestWorkspaceClientAuthenticatesThroughTheHelperForALoopbackServer(t *testi
 func TestWorkspaceClientStillRefusesWithoutAnyCredential(t *testing.T) {
 	t.Setenv("FILAMENT_GRAPHQL_ENDPOINT", "http://127.0.0.1:1/graphql")
 	stubKeychain(t, "", auth.ErrNotFound)
-	stubHelper(t, "exit 1")
+	stubHelper(t, helper("exit 1"))
 	if err := workspaceListCmd.Flags().Set("server-url", "https://mcp.production.flmnt.ai/mcp"); err != nil {
 		t.Fatal(err)
 	}

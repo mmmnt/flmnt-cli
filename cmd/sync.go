@@ -31,9 +31,8 @@ func resolveAuthCmd(flagVal, dir string) (string, error) {
 }
 
 // withoutClientArg drops a `--client <id>` / `--client=<id>` argument from a helper command. The
-// .mcp.json entry declares Claude Code's client that way, and the helper lets the argument beat the
-// environment; the CLI's own client id travels as helperClientIDVar, so the entry's declaration must
-// not ride along or the CLI's writes are attributed to Claude Code.
+// .mcp.json entry declares Claude Code's tool that way; the CLI names its own when it runs the helper
+// (runAuthHelper), and two declarations would leave the helper to pick one.
 func withoutClientArg(command string) string {
 	words := strings.Fields(command)
 	kept := words[:0]
