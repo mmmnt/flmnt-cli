@@ -30,12 +30,16 @@ type Error struct {
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
 
 // Approval is what a code is waiting for (SPEC-LOCAL-002): an authorization names the client and its
-// redirect URI, a device code names the device's client id. It never carries a sub.
+// redirect URI, a device code names the device's client id. It carries a sub only when the code was
+// claimed from another machine.
 type Approval struct {
 	Kind        string `json:"kind"`
 	ClientID    string `json:"client_id"`
 	ClientName  string `json:"client_name"`
 	RedirectURI string `json:"redirect_uri"`
+	// ClaimedSub is the identity a dialer on another machine bound to the code (SPEC-LOCAL-007);
+	// the approval then keeps it, so the prompt names it.
+	ClaimedSub string `json:"claimed_sub,omitempty"`
 }
 
 // Pending asks GET /local/pending/<code>.
@@ -45,16 +49,16 @@ func Pending(baseURL, code string) (Approval, error) {
 		return Approval{}, err
 	}
 	var p Approval
-	if err := decode(resp, &p); err != nil {
+	if err := Decode(resp, &p); err != nil {
 		return Approval{}, err
 	}
 	return p, nil
 }
 
-// decode reads a 2xx body into out, or turns the broker's {code, message} refusal into an *Error.
+// Decode reads a 2xx body into out, or turns the broker's {code, message} refusal into an *Error.
 // A body that is not the contract's is reported with its status and text so a proxy page or a crash
-// is never mistaken for a refusal.
-func decode(resp *http.Response, out any) error {
+// is never mistaken for a refusal. The public claim client (localclaim) reads the same contract.
+func Decode(resp *http.Response, out any) error {
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -86,7 +90,7 @@ func Approve(baseURL, code, sub, clientID string) error {
 	var out struct {
 		Status string `json:"status"`
 	}
-	if err := decode(resp, &out); err != nil {
+	if err := Decode(resp, &out); err != nil {
 		return err
 	}
 	if out.Status != "approved" {
