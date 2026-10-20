@@ -217,3 +217,39 @@ func TestWhoamiSaysNotLoggedInWhenThereIsNoSessionAndNoServer(t *testing.T) {
 		t.Fatalf("--json refuses with the reason: err %v stderr %q", err, stderr)
 	}
 }
+
+/*
+The mirror of the bug, under the ruling that identity and session are separate (2026-10-20): a
+hosted session on a machine that still holds its local identity — as every machine does after
+`flmnt login` now — answers from the hosted token, even in a repo pinned to the local harness. The
+session's kind decides, never which credential happens to exist.
+*/
+func TestWhoamiAnswersFromTheHostedSessionWhileTheLocalIdentityIsPresent(t *testing.T) {
+	stubIdentity(t, localMike, nil)
+	authHeaderLoadToken = func(string) (auth.TokenSet, error) {
+		return auth.TokenSet{AccessToken: "acc", IDToken: idToken(t, `{"sub":"u-123","email":"mike@flmnt.ai"}`)}, nil
+	}
+	t.Cleanup(func() { authHeaderLoadToken = auth.LoadToken })
+	stubConfig(t, auth.CLIConfig{Login: auth.LoginHosted, ServerURL: "https://mcp.production.flmnt.ai", Sub: "u-123", ClientID: "flmnt-cli"})
+	t.Setenv("QUORUM_SERVER_URL", "")
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/.quorum.json", []byte(`{"server_url":"http://localhost:8000/mcp","project_id":"bc674142","project_name":"quorum"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	stdout, _, err := runWhoami(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "mike@flmnt.ai") || strings.Contains(stdout, localMike.Sub) {
+		t.Fatalf("got %q", stdout)
+	}
+	stdout, _, err = runWhoami(t, "--json", "--client", "flmnt-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := decodeWhoami(t, stdout); got["sub"] != "u-123" || got["client_id"] != "flmnt-cli" {
+		t.Fatalf("got %v", got)
+	}
+}
