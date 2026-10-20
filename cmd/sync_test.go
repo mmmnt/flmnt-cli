@@ -116,8 +116,8 @@ func TestSyncCommandsAreRegisteredWithExpectedFlags(t *testing.T) {
 		if c.Flags().Lookup("dry-run") == nil {
 			t.Fatalf("%s missing --dry-run flag", c.Name())
 		}
-		if c.Flags().Lookup("local-auth-cmd") == nil {
-			t.Fatalf("%s missing --local-auth-cmd flag", c.Name())
+		if c.Flags().Lookup("local-auth-cmd") != nil {
+			t.Fatalf("%s still carries --local-auth-cmd; the helper it named is retired", c.Name())
 		}
 	}
 	if !sub["push"] || !sub["pull"] {
@@ -149,14 +149,17 @@ func TestResolveRemoteServerURLPrefersRemoteURLFlag(t *testing.T) {
 	}
 }
 
-func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
-	cmd := syncPushCmd
-	if err := cmd.Flags().Set("local-auth-cmd", helper(`echo '{"Authorization": "Bearer L"}'`)); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", "") })
+/*
+sync's local side ran the checkout's headers-helper (quorum's scripts/mcp-auth-header.sh) for its
 
-	ep, err := resolveLocalEndpoint(cmd)
+	bearer and took the workspace from the X-Workspace-Id it printed. The script is gone: the local
+	bearer is the keychain token `flmnt login --local` stores under the local server URL, and the
+	workspace is --local-workspace, default "quorum".
+*/
+func TestResolveLocalEndpointAuthenticatesFromTheKeychain(t *testing.T) {
+	stubKeychain(t, freshJWT(t, "local-login"), nil)
+
+	ep, err := resolveLocalEndpoint(syncPushCmd)
 	if err != nil {
 		t.Fatalf("resolveLocalEndpoint: %v", err)
 	}
@@ -164,23 +167,17 @@ func TestResolveLocalEndpointUsesAuthCmdAndDefaults(t *testing.T) {
 		t.Fatalf("defaults wrong: %s / %s", ep.Ref, ep.Workspace)
 	}
 	if ep.GQL == nil {
-		t.Fatal("expected an authenticated GraphQL client from the local auth helper")
+		t.Fatal("expected an authenticated GraphQL client from the stored local token")
 	}
 }
 
-/* The local workspace is whatever the helper scopes the session to; "quorum" is only the answer when it prints none. */
-func TestResolveLocalEndpointTakesTheWorkspaceFromTheHelper(t *testing.T) {
-	cmd := syncPushCmd
-	if err := cmd.Flags().Set("local-auth-cmd", helper(`echo '{"Authorization": "Bearer L", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`)); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cmd.Flags().Set("local-auth-cmd", "") })
+/* No stored token for the local server: refused with the login that fills it, nothing substituted. */
+func TestResolveLocalEndpointRefusesWithoutALocalLogin(t *testing.T) {
+	stubKeychain(t, "", auth.ErrNotFound)
 
-	ep, err := resolveLocalEndpoint(cmd)
-	if err != nil {
-		t.Fatalf("resolveLocalEndpoint: %v", err)
-	}
-	if ep.Workspace != "bc674142-782e-4fc3-aa79-585d12ff2d96" {
-		t.Fatalf("workspace %q, want the helper's X-Workspace-Id", ep.Workspace)
+	_, err := resolveLocalEndpoint(syncPushCmd)
+	want := "not logged in to http://localhost:8000: run `flmnt login --local --server-url http://localhost:8000`"
+	if err == nil || err.Error() != want {
+		t.Fatalf("got %v, want %q", err, want)
 	}
 }
