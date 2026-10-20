@@ -28,6 +28,32 @@ func TestResolveAuthCmd(t *testing.T) {
 	}
 }
 
+/*
+The checkout's .mcp.json already names the helper Claude Code runs (its `flmnt` entry's headersHelper);
+
+	the CLI runs that same one rather than a path of its own, so the two can never mint differently.
+	It is the checkout's own declaration, so no .quorum.json gate applies — but a .quorum.json still
+	wins nothing over it: the entry is the more specific statement.
+*/
+func TestResolveAuthCmdReadsTheCheckoutsHeadersHelper(t *testing.T) {
+	dir := t.TempDir()
+	mcp := `{"mcpServers":{"flmnt":{"type":"http","url":"http://localhost:8000/mcp","headersHelper":"bash scripts/mcp-auth-header.sh --client claude-code-local"}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(mcp), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".quorum.json"), []byte(`{"server_url":"x"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAuthCmd("", dir)
+	if err != nil || got != "bash scripts/mcp-auth-header.sh --client claude-code-local" {
+		t.Fatalf("got %q err %v, want the .mcp.json headersHelper", got, err)
+	}
+	if got, _ := resolveAuthCmd("my-cmd", dir); got != "my-cmd" {
+		t.Fatalf("an explicit command still wins: %q", got)
+	}
+}
+
 func TestRunAuthHelperExtractsAuthorizationAndWorkspace(t *testing.T) {
 	got, err := runAuthHelper(`echo '{"Authorization": "Bearer LOCALTOK", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`)
 	if err != nil {

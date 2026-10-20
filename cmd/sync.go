@@ -11,16 +11,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resolveAuthCmd chooses the local auth-header command. An explicit --local-auth-cmd is honored
-// verbatim; the repo-relative default (defaultLocalAuthCmd) runs ONLY inside a configured flmnt
-// project (a .quorum.json in the working directory), so `flmnt sync` in an unrelated repo cannot
-// auto-execute that repo's script via the SessionEnd hook.
+// resolveAuthCmd chooses the headers-helper command. An explicit --local-auth-cmd / --auth-cmd is
+// honored verbatim; then the checkout's own `flmnt` entry in .mcp.json names the helper Claude Code
+// runs, which the CLI runs too; last, the repo-relative default (defaultLocalAuthCmd) runs ONLY inside a
+// configured flmnt project (a .quorum.json in the working directory), so `flmnt sync` in an unrelated
+// repo cannot auto-execute that repo's script via the SessionEnd hook.
 func resolveAuthCmd(flagVal, dir string) (string, error) {
 	if flagVal != "" {
 		return flagVal, nil
 	}
+	if entry, err := setup.FlmntEntry(dir); err == nil && entry.HeadersHelper != "" {
+		return entry.HeadersHelper, nil
+	}
 	if _, err := setup.LoadProjectConfig(dir); err != nil {
-		return "", fmt.Errorf("no --local-auth-cmd and no .quorum.json in the working directory; refusing to run the default cwd script %q (run `flmnt setup` here or pass --local-auth-cmd)", defaultLocalAuthCmd)
+		return "", fmt.Errorf("no --auth-cmd, no headersHelper on the flmnt entry in .mcp.json and no .quorum.json in the working directory; refusing to run the default cwd script %q (run `flmnt setup` here or pass --auth-cmd)", defaultLocalAuthCmd)
 	}
 	return defaultLocalAuthCmd, nil
 }
