@@ -2,9 +2,11 @@ package auth
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"os/exec"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/99designs/keyring"
 )
@@ -54,7 +56,26 @@ func (s securityKeyring) Get(key string) (keyring.Item, error) {
 	if err != nil {
 		return keyring.Item{}, err
 	}
-	return keyring.Item{Key: key, Data: bytes.TrimRight(out, "\n")}, nil
+	return keyring.Item{Key: key, Data: decodeSecurityValue(bytes.TrimRight(out, "\n"))}, nil
+}
+
+// decodeSecurityValue undoes `security -w`'s one quirk: a secret that holds a newline or a byte outside
+// printable ASCII is printed as hex rather than as itself (the identity's JSON, for one). A value that
+// is wholly hex of even length and decodes to text is that text; anything else is returned as read.
+func decodeSecurityValue(out []byte) []byte {
+	if len(out) == 0 || len(out)%2 != 0 {
+		return out
+	}
+	for _, c := range out {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return out
+		}
+	}
+	decoded, err := hex.DecodeString(string(out))
+	if err != nil || !utf8.Valid(decoded) {
+		return out
+	}
+	return decoded
 }
 
 func (s securityKeyring) Remove(key string) error {

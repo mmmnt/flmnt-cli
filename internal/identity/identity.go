@@ -133,9 +133,10 @@ func StorageDescription() string {
 	return auth.IdentityStorageDescription()
 }
 
-// Save writes the identity to the keychain and refreshes the file cache.
+// Save writes the identity to the keychain, one line (the macOS `security` CLI prints a multi-line
+// secret back as hex), and refreshes the indented file cache.
 func Save(i Identity) error {
-	raw, err := json.MarshalIndent(i, "", "  ")
+	compact, err := json.Marshal(i)
 	if err != nil {
 		return err
 	}
@@ -143,10 +144,14 @@ func Save(i Identity) error {
 	if err != nil {
 		return err
 	}
-	if err := ring.Set(keyring.Item{Key: ringKey, Data: raw}); err != nil {
+	if err := ring.Set(keyring.Item{Key: ringKey, Data: compact}); err != nil {
 		return err
 	}
-	return writeCache(raw)
+	indented, err := json.MarshalIndent(i, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeCache(indented)
 }
 
 func writeCache(raw []byte) error {
@@ -178,10 +183,18 @@ func Load() (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
-	if err := ring.Set(keyring.Item{Key: ringKey, Data: cached}); err != nil {
+	id, err := parse(cached)
+	if err != nil {
 		return Identity{}, err
 	}
-	return parse(cached)
+	compact, err := json.Marshal(id)
+	if err != nil {
+		return Identity{}, err
+	}
+	if err := ring.Set(keyring.Item{Key: ringKey, Data: compact}); err != nil {
+		return Identity{}, err
+	}
+	return id, nil
 }
 
 func loadCache() ([]byte, error) {

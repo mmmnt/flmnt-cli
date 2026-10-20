@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -205,5 +206,30 @@ func TestOpenKeyringSelectsSecurityBackendOnDarwin(t *testing.T) {
 	}
 	if _, ok := ring.(securityKeyring); !ok {
 		t.Fatalf("openKeyring returned %T, want securityKeyring", ring)
+	}
+}
+
+/*
+`security find-generic-password -w` prints a secret that holds a newline, or any byte outside printable
+
+	ASCII, as hex instead of as itself. The identity's JSON is read back as it was written; a token,
+	which is never hex, is returned as read; and hex that is not text is returned as read too.
+*/
+func TestSecurityKeyringGetDecodesTheHexTheSecurityCLIPrintsForMultilineSecrets(t *testing.T) {
+	json := "{\n  \"sub\": \"local_a\"\n}"
+	run, _ := fakeRun([]byte(hex.EncodeToString([]byte(json))+"\n"), 0, nil)
+	item, err := securityKeyring{service: "flmnt-identity", run: run}.Get("identity")
+	if err != nil || string(item.Data) != json {
+		t.Fatalf("got %q %v", item.Data, err)
+	}
+	run, _ = fakeRun([]byte("eyJhbGciOi.eyJzdWIi.sig\n"), 0, nil)
+	item, _ = securityKeyring{service: keychainService, run: run}.Get("k")
+	if string(item.Data) != "eyJhbGciOi.eyJzdWIi.sig" {
+		t.Fatalf("a token is returned as read: %q", item.Data)
+	}
+	run, _ = fakeRun([]byte("abcdef0123\n"), 0, nil)
+	item, _ = securityKeyring{service: keychainService, run: run}.Get("k")
+	if string(item.Data) != "abcdef0123" {
+		t.Fatalf("hex that decodes to bytes that are not text is returned as read: %q", item.Data)
 	}
 }
