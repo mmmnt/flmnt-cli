@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test (CGO_ENABLED=0, mirrors the release build)
+        run: CGO_ENABLED=0 go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: npm/package-lock.json
+
+      # The wrapper picks and verifies the binary every install downloads; its tests and lint ran
+      # nowhere until this job, because the tooling was never declared.
+      - name: npm wrapper — tests (95% coverage floor) and lint
+        working-directory: npm
+        run: |
+          npm ci
+          npm test
+          npm run lint

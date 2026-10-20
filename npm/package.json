@@ -1,7 +1,7 @@
 {
 	"name": "@mmmnt/flmnt",
 	"version": "0.0.0-dev",
-	"description": "flmnt CLI — installs the platform-native flmnt binary.",
+	"description": "flmnt CLI \u2014 installs the platform-native flmnt binary.",
 	"type": "module",
 	"license": "Apache-2.0",
 	"repository": {
@@ -31,7 +31,14 @@
 	],
 	"scripts": {
 		"postinstall": "node scripts/install.js",
-		"test": "vitest run --passWithNoTests",
+		"test": "vitest run --coverage",
 		"lint": "eslint \"**/*.{js,mjs,ts,tsx}\" --no-error-on-unmatched-pattern"
+	},
+	"devDependencies": {
+		"@eslint/js": "^10.0.0",
+		"@vitest/coverage-v8": "^4.1.8",
+		"eslint": "^10.0.0",
+		"globals": "^16.0.0",
+		"vitest": "^4.1.8"
 	}
 }

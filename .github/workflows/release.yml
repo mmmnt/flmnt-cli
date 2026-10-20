@@ -52,6 +52,13 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: npm wrapper — tests and lint (fail before publishing if broken)
+        working-directory: npm
+        run: |
+          npm ci
+          npm test
+          npm run lint
+
       - name: Publish npm wrapper (@mmmnt/flmnt)
         working-directory: npm
         run: |
