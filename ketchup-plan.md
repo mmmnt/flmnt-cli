@@ -31,7 +31,7 @@ the registered OAuth client). Plain whoami says "local identity <sub>". The CLI 
 - [x] Burst 1: `setup.HeadersHelper(dir)` reads the `flmnt` entry's headersHelper from `.mcp.json` [depends: none]
 - [x] Burst 2: `isLoopback` names a loopback server URL (shared with `secureEndpoint`) [depends: none]
 - [x] Burst 3: `health` probes the configured server's `/health`, names the environment it resolved, and probes core/engine/proxy only when CORE_URL / ENGINE_URL / QUORUM_PROXY_PORT are declared [depends: 2]
-- [x] Burst 4: `setup` preserves a loopback `flmnt` entry that carries a headersHelper; a test round-trips quorum's `.mcp.json` shape [depends: 1,2]
+- [x] Burst 4: `setup` preserves a loopback `flmnt` entry … — REVERSED by founder ruling ("setup should override the flmnt key no matter what"): the entry is always rewritten; other servers verbatim [depends: 1,2]
 - [x] Burst 5: `runAuthHelper` returns the helper's Authorization AND X-Workspace-Id, runs it with BROKER_CLIENT_ID=flmnt-cli, and carries its stderr line in the error [depends: none]
 - [x] Burst 6: the helper command resolves flag → `.mcp.json` headersHelper → the project-gated default [depends: 1]
 - [x] Burst 7: `bestEffortBearer` tries the helper first on a loopback server and second elsewhere; `--auth-cmd` is a root persistent flag; helper output is memoized per command [depends: 2,5,6]
@@ -51,9 +51,6 @@ the registered OAuth client). Plain whoami says "local identity <sub>". The CLI 
 
 - CLOSED (founder): the harness publishes the router at 127.0.0.1:4000 and the checkout declares it as
   `local_graphql_endpoint` in .quorum.json (burst 18).
-- `setup --server-url <hosted>` inside a checkout whose `flmnt` entry is loopback + headersHelper keeps
-  that entry and says so. There is no flag to force the overwrite ("unless asked" is undefined).
+- CLOSED (founder): setup overrides the `flmnt` key no matter what.
 - CLOSED: the helper takes the LAST `--client`, so the CLI appends its own and parses nothing.
-- `whoami --json` on a hosted server with `--client` prints the registered OAuth client id
-  (QUORUM_CLIENT_ID / config client_id), not a derived one — per the contract; flagged in case the
-  founder wants the derived form on both sides.
+- CLOSED (founder): hosted `whoami --json --client` reports the registered OAuth client id as is.

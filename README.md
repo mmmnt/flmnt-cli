@@ -116,8 +116,9 @@ login is stored.
 A local server has no OAuth discovery to advertise its router, so the checkout declares it in
 `.quorum.json` as `"local_graphql_endpoint": "http://localhost:4000/graphql"`; on a loopback server
 that is read before the `<server>/graphql` fallback (`--graphql-endpoint` / `FILAMENT_GRAPHQL_ENDPOINT`
-still win), and `flmnt setup` preserves the field. `flmnt setup` also leaves a loopback `flmnt` entry
-that carries a `headersHelper` as it is.
+still win), and `flmnt setup` preserves the field. `flmnt setup` always rewrites the `flmnt` entry of
+`.mcp.json` to what it is asked for (other servers stay as they are); `pnpm env:local` in the checkout
+restores the local entry.
 
 ### Which workspace a command uses
 
