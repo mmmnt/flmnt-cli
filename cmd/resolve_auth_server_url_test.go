@@ -33,16 +33,21 @@ func TestServerURLFallsBackToTheLoginAlreadyRecorded(t *testing.T) {
 	}
 }
 
-/* A repo's own declaration still outranks the machine-wide login — the v1.10.0 behaviour. */
-func TestARepoStillOutranksTheRecordedLogin(t *testing.T) {
+/*
+The login outranks the repo. Founder ruling 2026-10-20: the CLI holds one login at a time, and
+every command takes its upstream from what that login recorded — no --server-url, no env. A repo
+pinned to production used to outrank it, which is how `flmnt login --local` in that repo kept
+whoami answering with the production account's email.
+*/
+func TestTheRecordedLoginOutranksTheRepo(t *testing.T) {
 	orig := authHeaderLoadConfig
 	defer func() { authHeaderLoadConfig = orig }()
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
-		return auth.CLIConfig{ServerURL: "https://mcp.production.flmnt.ai/mcp"}, nil
+		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: "http://localhost:8000"}, nil
 	}
 	t.Setenv("QUORUM_SERVER_URL", "")
 	dir := t.TempDir()
-	cfg := `{"server_url":"http://localhost:8000","project_id":"ws-1"}`
+	cfg := `{"server_url":"https://mcp.production.flmnt.ai","project_id":"ws-1"}`
 	if err := os.WriteFile(filepath.Join(dir, ".quorum.json"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +56,27 @@ func TestARepoStillOutranksTheRecordedLogin(t *testing.T) {
 	c.Flags().String("server-url", "", "")
 
 	if got := resolveAuthServerURL(c); got != "http://localhost:8000" {
-		t.Errorf("the repo's own server URL must win; got %q", got)
+		t.Errorf("the login's server must win over the repo's; got %q", got)
+	}
+}
+
+/* With nothing logged in, the repo's own declaration is the answer, as before. */
+func TestTheRepoAnswersWhenNothingIsLoggedIn(t *testing.T) {
+	orig := authHeaderLoadConfig
+	defer func() { authHeaderLoadConfig = orig }()
+	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
+	t.Setenv("QUORUM_SERVER_URL", "")
+	dir := t.TempDir()
+	cfg := `{"server_url":"https://mcp.production.flmnt.ai","project_id":"ws-1"}`
+	if err := os.WriteFile(filepath.Join(dir, ".quorum.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	c := &cobra.Command{}
+	c.Flags().String("server-url", "", "")
+
+	if got := resolveAuthServerURL(c); got != "https://mcp.production.flmnt.ai" {
+		t.Errorf("got %q", got)
 	}
 }
 

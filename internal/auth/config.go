@@ -8,8 +8,27 @@ import (
 	"path/filepath"
 )
 
+// The CLI holds ONE login at a time. Login names which kind the recorded session is — LoginHosted
+// (`flmnt login`, OAuth tokens in the keychain) or LoginLocal (`flmnt login --local`, the derived
+// identity) — and a login of either kind replaces whatever session was there. A config written by an
+// older build carries no Login; it was only ever written by a hosted login.
+const (
+	LoginHosted = "hosted"
+	LoginLocal  = "local"
+)
+
 type CLIConfig struct {
-	ServerURL           string `json:"server_url,omitempty"`
+	// Login is LoginHosted or LoginLocal: the kind of session this config records.
+	Login string `json:"login,omitempty"`
+	// ServerURL is the server the session was made against: the hosted MCP for a hosted login, the
+	// loopback server for a local one. Every command resolves its upstream from here.
+	ServerURL string `json:"server_url,omitempty"`
+	// Sub and Identity are who the session is: the token's sub and its display name (email, username
+	// or sub) for a hosted login; the derived sub, twice, for a local one.
+	Sub        string `json:"sub,omitempty"`
+	Identity   string `json:"identity,omitempty"`
+	LoggedInAt string `json:"logged_in_at,omitempty"`
+
 	ActiveWorkspaceID   string `json:"active_workspace_id,omitempty"`
 	ActiveWorkspaceName string `json:"active_workspace_name,omitempty"`
 	ClientID            string `json:"client_id,omitempty"`
@@ -70,6 +89,20 @@ func SaveConfig(cfg CLIConfig) error {
 		return err
 	}
 	return os.WriteFile(path, raw, 0o600)
+}
+
+// Session says whether a login is recorded at all. An older config with a server_url but no login
+// field was written by a hosted login and counts as one.
+func (c CLIConfig) Session() bool {
+	return c.Login != "" || c.ServerURL != ""
+}
+
+// LoginKind is the session's kind, inferring LoginHosted for a config an older build wrote.
+func (c CLIConfig) LoginKind() string {
+	if c.Login == "" && c.ServerURL != "" {
+		return LoginHosted
+	}
+	return c.Login
 }
 
 func ClearConfig() error {

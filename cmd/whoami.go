@@ -14,8 +14,10 @@ import (
 var whoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show the active identity and workspace",
-	Long: "Shows who is signed in and which workspace is in force here. On a local server (loopback)\n" +
-		"the identity is the local login (`flmnt login --local`); elsewhere it is the stored OAuth login.\n" +
+	Long: "Shows who is signed in and which workspace is in force here. The CLI holds one login at a\n" +
+		"time: after `flmnt login --local` the identity is the local login, after `flmnt login` the stored\n" +
+		"OAuth login, and no flag is needed to say which. Without a login, a loopback server (--server-url\n" +
+		"or QUORUM_SERVER_URL) reads as local and anything else as hosted.\n" +
 		"--json prints one object {sub,workspace,client_id?} for a headers-helper that\n" +
 		"mints a local credential as that person; --client <tool> adds the client id derived for that\n" +
 		"tool. Not logged in: nothing on stdout, the reason on stderr, exit 1.",
@@ -23,15 +25,17 @@ var whoamiCmd = &cobra.Command{
 		// The same resolution every other command uses, so standing in a configured repo is enough:
 		// whoami used to refuse with the server_url its own .quorum.json was declaring.
 		serverURL := resolveAuthServerURL(cmd)
-		if serverURL == "" {
-			return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
-		}
+		cfg, _ := authHeaderLoadConfig()
+		kind := loginKind(cfg, serverURL)
 		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
-			return runWhoamiJSON(cmd, serverURL)
+			return runWhoamiJSON(cmd, cfg, kind, serverURL)
 		}
 
 		var who string
-		if httpx.IsLoopback(serverURL) {
+		if kind == "" {
+			fmt.Fprintln(cmd.OutOrStdout(), "Not logged in (run `flmnt login` or `flmnt login --local`).")
+			return nil
+		} else if kind == auth.LoginLocal {
 			id, err := identityLoad()
 			if err != nil {
 				fmt.Fprintln(cmd.OutOrStdout(), "Not logged in locally (run `flmnt login --local`).")
@@ -54,7 +58,6 @@ var whoamiCmd = &cobra.Command{
 			who = identityOf(claims)
 		}
 
-		cfg, _ := authHeaderLoadConfig()
 		pinned, pinnedName := "", ""
 		if pc, perr := setup.LoadProjectConfig(""); perr == nil {
 			pinned, pinnedName = pc.ProjectID, pc.ProjectName
@@ -64,15 +67,33 @@ var whoamiCmd = &cobra.Command{
 	},
 }
 
+// loginKind is which login answers: the recorded session's, or — with no session — local for a
+// loopback server and hosted for any other; "" when there is neither a session nor a server.
+func loginKind(cfg auth.CLIConfig, serverURL string) string {
+	if kind := cfg.LoginKind(); kind != "" {
+		return kind
+	}
+	switch {
+	case serverURL == "":
+		return ""
+	case httpx.IsLoopback(serverURL):
+		return auth.LoginLocal
+	default:
+		return auth.LoginHosted
+	}
+}
+
 // runWhoamiJSON is what a local headers-helper asks (`flmnt whoami --json --client <tool>`) to learn
-// who to mint for. A loopback server answers from the local login — the derived sub and the client
-// id derived for the tool; a hosted server from the stored login and its registered OAuth client.
-// Nothing on stdout when there is no login of the kind asked for: the helper then blocks.
-func runWhoamiJSON(cmd *cobra.Command, serverURL string) error {
+// who to mint for. A local login answers with the derived sub and the client id derived for the
+// tool; a hosted login with the stored token's sub and its registered OAuth client. Nothing on
+// stdout when there is no login: the helper then blocks.
+func runWhoamiJSON(cmd *cobra.Command, cfg auth.CLIConfig, kind, serverURL string) error {
 	tool, _ := cmd.Flags().GetString("client")
-	cfg, _ := authHeaderLoadConfig()
 	out := map[string]string{}
-	if httpx.IsLoopback(serverURL) {
+	if kind == "" {
+		return fmt.Errorf("whoami: not logged in (run `flmnt login` or `flmnt login --local`)")
+	}
+	if kind == auth.LoginLocal {
 		id, err := identityLoad()
 		if err != nil {
 			return fmt.Errorf("whoami: %w", err)

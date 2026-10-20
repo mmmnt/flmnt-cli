@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/99designs/keyring"
 )
@@ -149,6 +150,57 @@ func DeleteToken(projectURL string) error {
 		}
 	}
 	return nil
+}
+
+// DeleteAllTokens removes every credential the CLI has stored, for every server it was ever logged
+// into, and returns the keys it removed. One login at a time means a logout — or a login of the
+// other kind — leaves nothing behind: not the token for a server the config no longer names, not a
+// legacy single-blob entry, not the encrypted file keyring an older build wrote. That file keyring
+// under the config dir holds nothing but the CLI's tokens, so it is removed whole.
+func DeleteAllTokens() ([]string, error) {
+	ring, err := openKeyring()
+	if err != nil {
+		return nil, err
+	}
+	keys, err := ring.Keys()
+	if err != nil {
+		return nil, err
+	}
+	var removed []string
+	for _, key := range keys {
+		if err := ring.Remove(key); err != nil {
+			if errors.Is(err, keyring.ErrKeyNotFound) || errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return removed, err
+		}
+		removed = append(removed, key)
+	}
+	if dir, derr := ConfigDir(); derr == nil {
+		if err := os.RemoveAll(filepath.Join(dir, "keyring")); err != nil {
+			return removed, err
+		}
+	}
+	return removed, nil
+}
+
+// OriginsOf reduces token keys ("<origin>|<field>" or a legacy "<origin>") to their distinct
+// origins, in first-seen order — what a logout reports as cleared.
+func OriginsOf(keys []string) []string {
+	var origins []string
+	seen := map[string]bool{}
+	for _, key := range keys {
+		origin := key
+		if i := strings.LastIndex(key, "|"); i >= 0 {
+			origin = key[:i]
+		}
+		if origin == "" || seen[origin] {
+			continue
+		}
+		seen[origin] = true
+		origins = append(origins, origin)
+	}
+	return origins
 }
 
 func filePassword(string) (string, error) { return keychainService, nil }

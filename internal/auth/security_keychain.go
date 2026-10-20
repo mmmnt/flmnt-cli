@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os/exec"
+	"strings"
 
 	"github.com/99designs/keyring"
 )
@@ -64,9 +65,44 @@ func (s securityKeyring) Remove(key string) error {
 	return err
 }
 
-// Keys is unused by the token store (it addresses items by known key) and the security CLI has no
-// clean per-service enumeration, so it reports none rather than dumping the whole keychain.
-func (s securityKeyring) Keys() ([]string, error) { return nil, nil }
+// Keys lists every item stored under the CLI's service. The security CLI has no per-service
+// enumeration, so the keychain's metadata is dumped (`dump-keychain` without -d prints attributes,
+// never secrets, and never prompts) and the items whose service is ours are picked out. Logout
+// relies on this to leave nothing behind, whatever server a token was stored for.
+func (s securityKeyring) Keys() ([]string, error) {
+	out, _, err := s.run("dump-keychain")
+	if err != nil {
+		return nil, err
+	}
+	return parseSecurityDump(out, s.service), nil
+}
+
+// parseSecurityDump reads `security dump-keychain` output: items are separated by a `keychain:`
+// line, and within an item the "acct" attribute (our key) precedes the "svce" attribute (the
+// service). The account of every item whose service matches is returned, in dump order.
+func parseSecurityDump(dump []byte, service string) []string {
+	var keys []string
+	acct, found := "", false
+	flush := func() {
+		if found && acct != "" {
+			keys = append(keys, acct)
+		}
+		acct, found = "", false
+	}
+	for _, line := range strings.Split(string(dump), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "keychain:"):
+			flush()
+		case strings.HasPrefix(trimmed, `"acct"<blob>="`):
+			acct = strings.TrimSuffix(strings.TrimPrefix(trimmed, `"acct"<blob>="`), `"`)
+		case trimmed == `"svce"<blob>="`+service+`"`:
+			found = true
+		}
+	}
+	flush()
+	return keys
+}
 
 // GetMetadata is not exposed by the security CLI; the token store never reads it.
 func (s securityKeyring) GetMetadata(string) (keyring.Metadata, error) {

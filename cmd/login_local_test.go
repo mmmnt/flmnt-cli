@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -11,30 +10,29 @@ import (
 	"github.com/mmmnt/flmnt-cli/internal/identity"
 )
 
+// runLogin runs `flmnt login`; the caller stubs the seams (stubLoginSeams) first, since a login wipes
+// the keychain and the local login, and a test must never reach the real ones.
 func runLogin(t *testing.T, args ...string) (stdout string, err error) {
 	t.Helper()
+	t.Setenv("QUORUM_SERVER_URL", "")
 	stdout, _, err = runLoginArgs(t, args...)
 	return stdout, err
 }
 
 const testMarker = "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"
 
-// stubLocalLoginSeams gives the login a machine (marker + OS user), a recorder for the login file, and
-// NO server anywhere — not in the environment, not in the login config — so a test that wants the
-// token step names its server explicitly and one that does not never reaches the network.
+// stubLocalLoginSeams gives the login a machine (marker + OS user) and a recorder for the login file,
+// on top of stubLoginSeams: discovery answers an empty document, so the token step is skipped unless
+// a test stubs discovery itself, and nothing reaches the network or the real keychain.
 func stubLocalLoginSeams(t *testing.T) *identity.Identity {
 	t.Helper()
 	stubLoginSeams(t)
-	origMarker, origUser, origSave, origCfg := identityMarker, identityOSUser, identitySave, authHeaderLoadConfig
+	origMarker, origUser, origSave := identityMarker, identityOSUser, identitySave
 	identityMarker = func() (string, error) { return testMarker, nil }
 	identityOSUser = func() (string, error) { return "mike", nil }
 	saved := &identity.Identity{}
 	identitySave = func(i identity.Identity) error { *saved = i; return nil }
-	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
-	t.Setenv("QUORUM_SERVER_URL", "")
-	t.Cleanup(func() {
-		identityMarker, identityOSUser, identitySave, authHeaderLoadConfig = origMarker, origUser, origSave, origCfg
-	})
+	t.Cleanup(func() { identityMarker, identityOSUser, identitySave = origMarker, origUser, origSave })
 	return saved
 }
 
@@ -88,17 +86,134 @@ func TestLoginLocalRefusesWithoutAMarker(t *testing.T) {
 	}
 }
 
-func TestLogoutLocalRemovesTheLocalLogin(t *testing.T) {
-	orig := identityRemove
+/*
+The local login IS the login from then on. The CLI holds one login at a time (founder ruling
+2026-10-20): the session config records the local kind and the loopback server it is for, so no
+command needs --server-url afterwards, and every hosted token is cleared so nothing hosted — an
+email from an old production token — can answer for this person again.
+*/
+func TestLoginLocalBecomesTheSessionAndClearsTheHostedLogin(t *testing.T) {
+	stubLocalLoginSeams(t)
+	deviceFlowNeverRuns(t)
+	var saved auth.CLIConfig
+	loginSaveConfig = func(c auth.CLIConfig) error { saved = c; return nil }
+	wiped := false
+	loginDeleteAllTokens = func() ([]string, error) {
+		wiped = true
+		return []string{"https://mcp.production.flmnt.ai|access_token", "https://mcp.production.flmnt.ai|id_token"}, nil
+	}
+
+	stdout, err := runLogin(t, "--local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !wiped {
+		t.Error("a local login must clear every hosted token: one login at a time")
+	}
+	want := auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL, Sub: localMike.Sub, Identity: localMike.Sub, LoggedInAt: "2026-10-20T16:00:00Z"}
+	if saved != want {
+		t.Errorf("session recorded %+v, want %+v", saved, want)
+	}
+	if !strings.Contains(stdout, defaultLocalURL) || !strings.Contains(stdout, "mcp.production.flmnt.ai") {
+		t.Errorf("the output must say which server the session is for and that the hosted login was cleared; got %q", stdout)
+	}
+}
+
+/* The server a local login records is the loopback one named, and only a loopback one. */
+func TestLoginLocalRecordsTheLoopbackServerNamedAndRefusesAHostedOne(t *testing.T) {
+	stubLocalLoginSeams(t)
+	deviceFlowNeverRuns(t)
+	saves := 0
+	identitySave = func(identity.Identity) error { saves++; return nil }
+	var saved auth.CLIConfig
+	loginSaveConfig = func(c auth.CLIConfig) error { saved = c; return nil }
+
+	if _, err := runLogin(t, "--local", "--server-url", "http://127.0.0.1:9000/mcp"); err != nil {
+		t.Fatal(err)
+	}
+	if saved.ServerURL != "http://127.0.0.1:9000/mcp" {
+		t.Errorf("recorded %q", saved.ServerURL)
+	}
+	if _, err := runLogin(t, "--local", "--server-url", "https://mcp.production.flmnt.ai"); err == nil || !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("a hosted server is refused for a local login: %v", err)
+	}
+	if saves != 1 {
+		t.Errorf("the refused login must write nothing; saves = %d", saves)
+	}
+}
+
+/*
+A hosted login replaces the session the same way: the local login goes, every token goes before
+its own is stored, and the config records the hosted kind and who the token says we are.
+*/
+func TestLoginHostedBecomesTheSessionAndClearsTheLocalLogin(t *testing.T) {
+	stubLoginSeams(t)
+	origPKCE, origStore := loginRunPKCEFlow, loginStoreToken
+	t.Cleanup(func() { loginRunPKCEFlow, loginStoreToken = origPKCE, origStore })
+	loginRunPKCEFlow = func(auth.PKCEConfig, func(string) error) (auth.TokenSet, error) {
+		return auth.TokenSet{AccessToken: "acc", RefreshToken: "ref", IDToken: idToken(t, `{"sub":"u-123","email":"mike@flmnt.ai"}`)}, nil
+	}
+	order := []string{}
+	loginStoreToken = func(string, auth.TokenSet) error { order = append(order, "store"); return nil }
+	loginDeleteAllTokens = func() ([]string, error) { order = append(order, "wipe"); return nil, nil }
+	identityRemove = func() error { order = append(order, "remove-local"); return nil }
+	loginLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: "http://localhost:8000", ActiveWorkspaceID: "ws-local"}, nil
+	}
+	var saved auth.CLIConfig
+	loginSaveConfig = func(c auth.CLIConfig) error { saved = c; return nil }
+
+	stdout, err := runLogin(t, "--server-url", "https://mcp.production.flmnt.ai", "--client-id", "c", "--auth-url", "https://a", "--token-url", "https://t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(order, ",") != "wipe,remove-local,store" {
+		t.Errorf("the previous session is cleared before the new token is stored; got %v", order)
+	}
+	if saved.Login != auth.LoginHosted || saved.ServerURL != "https://mcp.production.flmnt.ai" || saved.Sub != "u-123" || saved.Identity != "mike@flmnt.ai" || saved.LoggedInAt != "2026-10-20T16:00:00Z" {
+		t.Errorf("session recorded %+v", saved)
+	}
+	if saved.ActiveWorkspaceID != "" {
+		t.Error("a local session's workspace names nothing on the hosted server and must not carry over")
+	}
+	if !strings.Contains(stdout, "mike@flmnt.ai") || !strings.Contains(stdout, "https://mcp.production.flmnt.ai") {
+		t.Errorf("got %q", stdout)
+	}
+}
+
+/* Re-logging in to the same hosted server keeps the active workspace: it still names something there. */
+func TestHostedSessionKeepsTheWorkspaceOnlyForTheSameHostedServer(t *testing.T) {
+	prev := auth.CLIConfig{ServerURL: "https://mcp.production.flmnt.ai/mcp", ActiveWorkspaceID: "ws", ActiveWorkspaceName: "sift"}
+	same := hostedSession(prev, "https://mcp.production.flmnt.ai", auth.Claims{Sub: "u"}, auth.CLIConfig{}, loginNow())
+	if same.ActiveWorkspaceID != "ws" || same.ActiveWorkspaceName != "sift" {
+		t.Errorf("same origin keeps the workspace; got %+v", same)
+	}
+	other := hostedSession(prev, "https://mcp.staging.flmnt.dev", auth.Claims{Sub: "u"}, auth.CLIConfig{}, loginNow())
+	if other.ActiveWorkspaceID != "" {
+		t.Errorf("another server does not; got %+v", other)
+	}
+}
+
+func TestLogoutLocalRemovesTheLocalLoginAndItsSession(t *testing.T) {
+	stubLogoutSeams(t)
 	removed := false
 	identityRemove = func() error { removed = true; return nil }
-	t.Cleanup(func() { identityRemove = orig; _ = logoutCmd.Flags().Set("local", "false") })
-	var out bytes.Buffer
-	rootCmd.SetOut(&out)
-	rootCmd.SetArgs([]string{"logout", "--local"})
+	logoutLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL}, nil
+	}
+	cleared := false
+	logoutClearConfig = func() error { cleared = true; return nil }
 
-	if err := rootCmd.Execute(); err != nil || !removed {
-		t.Fatalf("err %v removed %v", err, removed)
+	if _, err := runLogout(t, "--local"); err != nil || !removed || !cleared {
+		t.Fatalf("err %v removed %v cleared %v", err, removed, cleared)
+	}
+
+	cleared = false
+	logoutLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{Login: auth.LoginHosted, ServerURL: "https://mcp.production.flmnt.ai"}, nil
+	}
+	if _, err := runLogout(t, "--local"); err != nil || cleared {
+		t.Fatalf("--local leaves a hosted session alone: err %v cleared %v", err, cleared)
 	}
 }
 
@@ -153,8 +268,8 @@ func TestLoginLocalObtainsTheCLITokenByApprovingItself(t *testing.T) {
 	if storedURL != "http://localhost:8000/mcp" || stored.AccessToken != "local-access" {
 		t.Fatalf("stored %s %+v", storedURL, stored)
 	}
-	if cfgSaved.ServerURL != "http://localhost:8000/mcp" || cfgSaved.TokenURL != "http://localhost:4010/token" || cfgSaved.ClientID != "flmnt-cli" {
-		t.Fatalf("config saved: %+v", cfgSaved)
+	if cfgSaved.Login != auth.LoginLocal || cfgSaved.Sub != saved.Sub || cfgSaved.ServerURL != "http://localhost:8000/mcp" || cfgSaved.TokenURL != "http://localhost:4010/token" || cfgSaved.ClientID != "flmnt-cli" {
+		t.Fatalf("the session must carry the endpoints the token needs: %+v", cfgSaved)
 	}
 	if !strings.Contains(stdout, saved.Sub) || !strings.Contains(stdout, "Local token stored") {
 		t.Fatalf("stdout: %q", stdout)
@@ -165,10 +280,11 @@ func TestLoginLocalObtainsTheCLITokenByApprovingItself(t *testing.T) {
 }
 
 /*
-The token step is a convenience on top of the login, never a condition of it: with no server, a hosted
+The token step is a convenience on top of the login, never a condition of it: a server whose discovery
 
-	server, or a server that advertises no device grant, the login is recorded and printed as before,
-	and the step says it was skipped and why. The device grant is not attempted.
+	fails or advertises no device grant leaves the login recorded and printed as before, and the step
+	says it was skipped and why. The device grant is not attempted. (A hosted server never gets this
+	far: the login itself refuses it.)
 */
 func TestLoginLocalSkipsTheTokenStepWithItsReason(t *testing.T) {
 	for name, tc := range map[string]struct {
@@ -176,13 +292,6 @@ func TestLoginLocalSkipsTheTokenStepWithItsReason(t *testing.T) {
 		discover func(string) (oauthDiscovery, error)
 		reason   string
 	}{
-		"no server url": {
-			reason: "no server URL resolved",
-		},
-		"a hosted server": {
-			args:   []string{"--server-url", "https://mcp.production.flmnt.ai/mcp"},
-			reason: "https://mcp.production.flmnt.ai/mcp is not a local server",
-		},
 		"discovery fails": {
 			args:     []string{"--server-url", "http://localhost:8000/mcp"},
 			discover: func(string) (oauthDiscovery, error) { return oauthDiscovery{}, errors.New("connection refused") },

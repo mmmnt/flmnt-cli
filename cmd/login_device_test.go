@@ -28,10 +28,17 @@ func runLoginArgs(t *testing.T, args ...string) (stdout, stderr string, err erro
 func stubLoginSeams(t *testing.T) {
 	t.Helper()
 	origDisc, origLoad, origSave := loginDiscover, loginLoadConfig, loginSaveConfig
+	origWipe, origRemove, origNow := loginDeleteAllTokens, identityRemove, loginNow
 	loginDiscover = func(string) (oauthDiscovery, error) { return oauthDiscovery{}, nil }
 	loginLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
 	loginSaveConfig = func(auth.CLIConfig) error { return nil }
-	t.Cleanup(func() { loginDiscover = origDisc; loginLoadConfig = origLoad; loginSaveConfig = origSave })
+	loginDeleteAllTokens = func() ([]string, error) { return nil, nil }
+	identityRemove = func() error { return nil }
+	loginNow = func() time.Time { return time.Date(2026, 10, 20, 16, 0, 0, 0, time.UTC) }
+	t.Cleanup(func() {
+		loginDiscover, loginLoadConfig, loginSaveConfig = origDisc, origLoad, origSave
+		loginDeleteAllTokens, identityRemove, loginNow = origWipe, origRemove, origNow
+	})
 }
 
 func TestLoginDeviceRequiresDeviceURL(t *testing.T) {

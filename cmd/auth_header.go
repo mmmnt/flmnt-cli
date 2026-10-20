@@ -61,6 +61,12 @@ func runAuthHeader(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// resolveAuthServerURL is the upstream every command talks to: an explicit --server-url, then
+// QUORUM_SERVER_URL, then THE LOGIN. The CLI holds one login at a time and records which server it
+// was made against, so a logged-in person never has to say where a command goes: `flmnt login`
+// points everything at the hosted MCP, `flmnt login --local` at the loopback server. A repo's own
+// .quorum.json answers only when nothing is logged in — it used to outrank the login, which is how
+// a local login in a repo pinned to production kept reporting the production account.
 func resolveAuthServerURL(cmd *cobra.Command) string {
 	if v, _ := cmd.Flags().GetString("server-url"); v != "" {
 		return v
@@ -68,15 +74,11 @@ func resolveAuthServerURL(cmd *cobra.Command) string {
 	if v := envOr("QUORUM_SERVER_URL", ""); v != "" {
 		return v
 	}
+	if cfg, err := authHeaderLoadConfig(); err == nil && cfg.Session() && cfg.ServerURL != "" {
+		return cfg.ServerURL
+	}
 	if pc, err := setup.LoadProjectConfig(""); err == nil && pc.ServerURL != "" {
 		return pc.ServerURL
-	}
-	// Last, the login already on disk. resolveActiveWorkspace below falls back to this same file for
-	// the workspace, so resolving the server URL anywhere else left the two halves of "where am I"
-	// disagreeing: outside a configured repo every command refused, with the answer sitting in the
-	// config. A repo still wins — this only turns a refusal into an answer.
-	if cfg, err := authHeaderLoadConfig(); err == nil {
-		return cfg.ServerURL
 	}
 	return ""
 }

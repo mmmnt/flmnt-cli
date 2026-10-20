@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 	"github.com/mmmnt/flmnt-cli/internal/httpx"
@@ -20,42 +21,60 @@ var (
 // runLocalLogin records the LOCAL LOGIN with no input: the marker the host machine already carries
 // and the OS user, digested to the sub a local flmnt mints for. Only the digest is written; a machine
 // with no readable marker is refused and an identity is never invented.
-func runLocalLogin(cmd *cobra.Command) (identity.Identity, error) {
+//
+// It is also THE login from here on: the session config records the local kind and the loopback
+// server it is for (--server-url / QUORUM_SERVER_URL when they name one, else the harness default),
+// so every command resolves its upstream from the login and needs no flag; and, one login at a time,
+// every hosted token is cleared, so nothing hosted can answer for this person again. The CLI's own
+// harness token is then obtained for that server (runLocalToken).
+func runLocalLogin(cmd *cobra.Command) error {
+	serverURL := firstNonEmpty(flagString(cmd, "server-url"), envOr("QUORUM_SERVER_URL", ""), defaultLocalURL)
+	if !httpx.IsLoopback(serverURL) {
+		return fmt.Errorf("local login refused: %s is not a loopback server (a local login is for a local flmnt; `flmnt login` signs in to a hosted one)", serverURL)
+	}
 	marker, err := identityMarker()
 	if err != nil {
-		return identity.Identity{}, fmt.Errorf("local login refused: %w", err)
+		return fmt.Errorf("local login refused: %w", err)
 	}
 	osUser, err := identityOSUser()
 	if err != nil {
-		return identity.Identity{}, fmt.Errorf("local login refused: %w", err)
+		return fmt.Errorf("local login refused: %w", err)
 	}
 	id := identity.Derive(marker, osUser)
 	if err := identitySave(id); err != nil {
-		return identity.Identity{}, fmt.Errorf("recording the local login: %w", err)
+		return fmt.Errorf("recording the local login: %w", err)
+	}
+	cleared, err := loginDeleteAllTokens()
+	if err != nil {
+		return fmt.Errorf("clearing the hosted login: %w", err)
+	}
+	session := localSession(id, serverURL, loginNow())
+	if err := loginSaveConfig(session); err != nil {
+		return fmt.Errorf("recording the session: %w", err)
 	}
 	path, _ := identity.Path()
-	fmt.Fprintf(cmd.OutOrStdout(), "Local login recorded: sub %s → %s\n", id.Sub, path)
-	return id, nil
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Local login recorded: sub %s → %s\n", id.Sub, path)
+	fmt.Fprintf(out, "Every command now talks to %s until `flmnt logout`.\n", serverURL)
+	if origins := auth.OriginsOf(cleared); len(origins) > 0 {
+		fmt.Fprintf(out, "The hosted login was cleared (%s): one login at a time.\n", joinComma(origins))
+	}
+	return runLocalToken(cmd, id, session, flagString(cmd, "admin-url"))
 }
 
 // runLocalToken obtains the CLI's OWN credential from the local flmnt once the login is recorded: the
 // device grant as `flmnt-cli`, with the CLI approving its own user code over the broker's loopback
 // admin listener for the identity it just recorded — nobody is sent to a browser (QRM-ADR-015). The
-// token lands under the server URL as any login's does. The step is skipped, with the reason, when no
-// server resolves, when it is not a local one, or when it advertises no device grant; the local login
-// itself stands either way.
-func runLocalToken(cmd *cobra.Command, id identity.Identity, serverURL, adminURL string) error {
+// token lands under the session's server URL as any login's does, and the session records the OAuth
+// endpoints refresh and logout need. The step is skipped, with the reason, when the server advertises
+// no device grant; the local login itself stands either way.
+func runLocalToken(cmd *cobra.Command, id identity.Identity, session auth.CLIConfig, adminURL string) error {
 	out := cmd.OutOrStdout()
 	skip := func(reason string) error {
 		fmt.Fprintf(out, "Token step skipped: %s\n", reason)
 		return nil
 	}
-	if serverURL == "" {
-		return skip("no server URL resolved (--server-url, QUORUM_SERVER_URL or the checkout's .quorum.json names the local flmnt)")
-	}
-	if !httpx.IsLoopback(serverURL) {
-		return skip(fmt.Sprintf("%s is not a local server; a hosted flmnt is signed in to with `flmnt login`", serverURL))
-	}
+	serverURL := session.ServerURL
 	doc, err := loginDiscover(serverURL)
 	if err != nil {
 		return skip(fmt.Sprintf("OAuth discovery at %s failed: %v", serverURL, err))
@@ -77,21 +96,53 @@ func runLocalToken(cmd *cobra.Command, id identity.Identity, serverURL, adminURL
 	if err := loginStoreToken(serverURL, tokens); err != nil {
 		return fmt.Errorf("storing token: %w", err)
 	}
-	cfg, _ := loginLoadConfig()
-	cfg.ServerURL = serverURL
-	cfg.AuthURL = doc.AuthorizationEndpoint
-	cfg.TokenURL = doc.TokenEndpoint
-	cfg.ClientID = cliTool
-	cfg.RevocationEndpoint = doc.RevocationEndpoint
-	_ = loginSaveConfig(cfg)
+	session.AuthURL = doc.AuthorizationEndpoint
+	session.TokenURL = doc.TokenEndpoint
+	session.ClientID = cliTool
+	session.RevocationEndpoint = doc.RevocationEndpoint
+	_ = loginSaveConfig(session)
 	fmt.Fprintf(out, "Local token stored in %s for %s.\n", auth.StorageDescription(), serverURL)
 	return nil
 }
 
+// localSession is the config a local login records. Nothing hosted carries over: no OAuth endpoints,
+// no active workspace (a hosted setting that names nothing on the harness).
+func localSession(id identity.Identity, serverURL string, now time.Time) auth.CLIConfig {
+	return auth.CLIConfig{
+		Login:      auth.LoginLocal,
+		ServerURL:  serverURL,
+		Sub:        id.Sub,
+		Identity:   id.Sub,
+		LoggedInAt: now.UTC().Format(time.RFC3339),
+	}
+}
+
+// runLocalLogout removes the local login only. When it was the session, the session goes with it.
 func runLocalLogout(cmd *cobra.Command) error {
 	if err := identityRemove(); err != nil {
 		return fmt.Errorf("removing the local login: %w", err)
 	}
+	if cfg, err := logoutLoadConfig(); err == nil && cfg.LoginKind() == auth.LoginLocal {
+		if err := logoutClearConfig(); err != nil {
+			return fmt.Errorf("clearing the session: %w", err)
+		}
+	}
 	fmt.Fprintln(cmd.OutOrStdout(), "Local login removed.")
 	return nil
+}
+
+func flagString(cmd *cobra.Command, name string) string {
+	v, _ := cmd.Flags().GetString(name)
+	return v
+}
+
+func joinComma(items []string) string {
+	out := ""
+	for i, item := range items {
+		if i > 0 {
+			out += ", "
+		}
+		out += item
+	}
+	return out
 }

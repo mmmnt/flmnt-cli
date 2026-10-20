@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 	"github.com/mmmnt/flmnt-cli/internal/localadmin"
@@ -11,12 +13,14 @@ import (
 )
 
 var (
-	loginRunDeviceFlow = auth.RunDeviceFlow
-	loginRunPKCEFlow   = auth.RunPKCEFlow
-	loginStoreToken    = auth.StoreToken
-	loginDiscover      = discoverOAuth
-	loginLoadConfig    = auth.LoadConfig
-	loginSaveConfig    = auth.SaveConfig
+	loginRunDeviceFlow   = auth.RunDeviceFlow
+	loginRunPKCEFlow     = auth.RunPKCEFlow
+	loginStoreToken      = auth.StoreToken
+	loginDeleteAllTokens = auth.DeleteAllTokens
+	loginDiscover        = discoverOAuth
+	loginLoadConfig      = auth.LoadConfig
+	loginSaveConfig      = auth.SaveConfig
+	loginNow             = time.Now
 )
 
 var loginCmd = &cobra.Command{
@@ -24,14 +28,7 @@ var loginCmd = &cobra.Command{
 	Short: "Authenticate with flmnt via OAuth2 (browser PKCE, or --device for headless); --local declares the identity a local flmnt mints for",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if local, _ := cmd.Flags().GetBool("local"); local {
-			id, err := runLocalLogin(cmd)
-			if err != nil {
-				return err
-			}
-			// The server is resolved the way every other command resolves it (flag, env, .quorum.json,
-			// the login config) so standing in a configured checkout is enough.
-			adminURL, _ := cmd.Flags().GetString("admin-url")
-			return runLocalToken(cmd, id, resolveAuthServerURL(cmd), adminURL)
+			return runLocalLogin(cmd)
 		}
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		if serverURL == "" {
@@ -94,18 +91,59 @@ var loginCmd = &cobra.Command{
 			tokens = t
 		}
 
+		// One login at a time: this login replaces whatever session was here — every token stored for
+		// any server, and the local login — before its own token is stored.
+		if _, err := loginDeleteAllTokens(); err != nil {
+			return fmt.Errorf("clearing the previous login: %w", err)
+		}
+		if err := identityRemove(); err != nil {
+			return fmt.Errorf("clearing the previous local login: %w", err)
+		}
 		if err := loginStoreToken(serverURL, tokens); err != nil {
 			return fmt.Errorf("storing token: %w", err)
 		}
-		cfg.ServerURL = serverURL
-		cfg.AuthURL = authURL
-		cfg.TokenURL = tokenURL
-		cfg.ClientID = clientID
-		cfg.RevocationEndpoint = revocationEndpoint
-		_ = loginSaveConfig(cfg)
+		claims, _ := auth.DecodeUnverified(firstNonEmpty(tokens.IDToken, tokens.AccessToken))
+		_ = loginSaveConfig(hostedSession(cfg, serverURL, claims, auth.CLIConfig{
+			AuthURL:            authURL,
+			TokenURL:           tokenURL,
+			ClientID:           clientID,
+			RevocationEndpoint: revocationEndpoint,
+		}, loginNow()))
 		fmt.Fprintln(cmd.OutOrStdout(), "Login successful. Token stored in "+auth.StorageDescription()+".")
+		fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s; every command now talks to %s until `flmnt logout`.\n", identityOf(claims), serverURL)
 		return nil
 	},
+}
+
+// hostedSession is the config a hosted login records: the kind, the server, who the token says we
+// are, and the OAuth endpoints logout and refresh need. The active workspace carries over only when
+// the previous session was a hosted login to this same server — a workspace names nothing on any
+// other server, and nothing on the local harness.
+func hostedSession(prev auth.CLIConfig, serverURL string, claims auth.Claims, endpoints auth.CLIConfig, now time.Time) auth.CLIConfig {
+	cfg := auth.CLIConfig{
+		Login:              auth.LoginHosted,
+		ServerURL:          serverURL,
+		Sub:                claims.Sub,
+		Identity:           identityOf(claims),
+		LoggedInAt:         now.UTC().Format(time.RFC3339),
+		AuthURL:            endpoints.AuthURL,
+		TokenURL:           endpoints.TokenURL,
+		ClientID:           endpoints.ClientID,
+		RevocationEndpoint: endpoints.RevocationEndpoint,
+	}
+	if prev.LoginKind() == auth.LoginHosted && sameOrigin(prev.ServerURL, serverURL) {
+		cfg.ActiveWorkspaceID, cfg.ActiveWorkspaceName = prev.ActiveWorkspaceID, prev.ActiveWorkspaceName
+	}
+	return cfg
+}
+
+func sameOrigin(a, b string) bool {
+	ua, erra := url.Parse(a)
+	ub, errb := url.Parse(b)
+	if erra != nil || errb != nil {
+		return a == b
+	}
+	return ua.Scheme == ub.Scheme && ua.Host == ub.Host
 }
 
 func openInBrowser(url string) error {
