@@ -163,3 +163,57 @@ func TestWhoamiNamesTheLocalLoginOnALoopbackServer(t *testing.T) {
 		t.Fatalf("got %q", stdout)
 	}
 }
+
+/*
+The bug as reported: `flmnt login --local`, then `flmnt whoami` in a repo pinned to production
+printed the email of the production token still in the keychain. The login is the session now: the
+recorded local login answers, with no --server-url and whatever the repo declares, and the hosted
+token is never consulted.
+*/
+func TestWhoamiAnswersFromTheRecordedLocalLoginInARepoPinnedToProduction(t *testing.T) {
+	stubIdentity(t, localMike, nil)
+	authHeaderLoadToken = func(string) (auth.TokenSet, error) {
+		t.Error("the hosted token must not be consulted while the local login is the session")
+		return auth.TokenSet{}, nil
+	}
+	t.Cleanup(func() { authHeaderLoadToken = auth.LoadToken })
+	stubConfig(t, auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL, Sub: localMike.Sub})
+	t.Setenv("QUORUM_SERVER_URL", "")
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/.quorum.json", []byte(`{"server_url":"https://mcp.production.flmnt.ai","project_id":"bc674142","project_name":"quorum"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+
+	stdout, _, err := runWhoami(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "local identity "+localMike.Sub) || strings.Contains(stdout, "@") {
+		t.Fatalf("got %q", stdout)
+	}
+	stdout, _, err = runWhoami(t, "--json", "--client", "flmnt-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := decodeWhoami(t, stdout); got["sub"] != localMike.Sub || got["workspace"] != "bc674142" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+/* Nothing logged in and no server named: a plain reason, not a demand for a flag. */
+func TestWhoamiSaysNotLoggedInWhenThereIsNoSessionAndNoServer(t *testing.T) {
+	stubIdentity(t, identity.Identity{}, identity.ErrNotFound)
+	stubKeychain(t, "", auth.ErrNotFound)
+	stubConfig(t, auth.CLIConfig{})
+	t.Setenv("QUORUM_SERVER_URL", "")
+	t.Chdir(t.TempDir())
+
+	stdout, _, err := runWhoami(t)
+	if err != nil || !strings.Contains(stdout, "Not logged in") || !strings.Contains(stdout, "flmnt login") {
+		t.Fatalf("err %v stdout %q", err, stdout)
+	}
+	if _, stderr, err := runWhoami(t, "--json"); err == nil || !strings.Contains(stderr, "not logged in") {
+		t.Fatalf("--json refuses with the reason: err %v stderr %q", err, stderr)
+	}
+}

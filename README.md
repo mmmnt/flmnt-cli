@@ -73,10 +73,16 @@ for ad-hoc commands — it does not decide where a configured repo records.
 
 ### Local flmnt (the compose harness)
 
-A checkout can run against a local flmnt instead of the hosted one. The CLI tells the two apart by
-the server URL it resolves (`--server-url` / `QUORUM_SERVER_URL` / `.quorum.json` / the login config):
-a loopback host — `http://localhost:8000/mcp` — is local, anything else is hosted. The hosted path is
-unchanged: credentials come from the keychain `flmnt login` filled.
+A checkout can run against a local flmnt instead of the hosted one. **The CLI holds one login at a
+time, and the login decides which.** `flmnt login` records a hosted session (the server it signed in
+to, who the token says you are, the OAuth endpoints); `flmnt login --local` records a local session
+(the loopback server, the derived sub). Either login replaces the other entirely — every stored token
+goes, the local login goes — and `flmnt logout` leaves nothing at all: the session, every token for
+every server, the local login, the file keyring of older builds. Every command takes its upstream from
+the session, so a logged-in person never passes `--server-url`; the chain is `--server-url` /
+`QUORUM_SERVER_URL` / **the login** / `.quorum.json` (the repo answers only when nothing is logged
+in). A loopback host — `http://localhost:8000/mcp` — is local, anything else is hosted. The hosted
+path is unchanged: credentials come from the keychain `flmnt login` filled.
 
 **Identity.** A local flmnt mints credentials for a declared person, never for a default:
 
@@ -94,10 +100,12 @@ forever, a tool name the same client id forever, and two people or two machines 
 `local_` prefix lets the hosted side recognise a local identity without a lookup. Only the digest is
 kept — `~/.filament/local-identity.json` (0600) holds `{sub, created_at}`, never the marker — and that
 file is what makes the login explicit. A machine with no readable marker is refused; nothing is
-generated at random and nothing is reused from the hosted login. `whoami --json` prints one object
-`{"sub","workspace","client_id"?}`: on a loopback server from the local login, elsewhere from the
-stored OAuth login (`client_id` is then the registered OAuth client); `client_id` only appears with
-`--client`. Not logged in (either kind): nothing on stdout, one reason line on stderr, exit 1. Plain
+generated at random and nothing is reused from the hosted login. `login --local` takes the loopback
+server from `--server-url` / `QUORUM_SERVER_URL` when one is named (a hosted URL is refused), else
+`http://localhost:8000`, and records it as the session's server. `whoami --json` prints one object
+`{"sub","workspace","client_id"?}`: from the local login when that is the session, from the stored
+OAuth login when a hosted one is (`client_id` is then the registered OAuth client); `client_id` only
+appears with `--client`. Not logged in (either kind): nothing on stdout, one reason line on stderr, exit 1. Plain
 `whoami` says `local identity <sub>` for the local login.
 
 **Credentials.** On a loopback server every command — `brief`, `gate`, `derive`, `record-*`, `whoami`,
@@ -139,11 +147,11 @@ flmnt help                       # list all commands
 flmnt <command> -h               # detailed help for a command
 
 # Authentication
-flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
-flmnt login --local              # record the local login (derived from this machine + OS user) a local flmnt mints for
-flmnt logout                     # sign out and revoke local credentials
-flmnt logout --local             # remove the local login
-flmnt whoami                     # show your identity and which workspace is in force here
+flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless); becomes THE login
+flmnt login --local              # record the local login (derived from this machine + OS user) a local flmnt mints for; becomes THE login
+flmnt logout                     # sign out: clear the session, every stored token, and the local login
+flmnt logout --local             # remove only the local login
+flmnt whoami                     # show your identity (from the login; no --server-url needed) and which workspace is in force here
 flmnt whoami --json [--client <tool>]   # the identity as JSON for a local headers-helper (exit 1 when not logged in)
 
 # Workspaces

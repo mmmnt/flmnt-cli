@@ -95,8 +95,11 @@ func TestSecurityKeyringRemovePropagatesOtherErrors(t *testing.T) {
 	}
 }
 
-func TestSecurityKeyringKeysAndMetadataAreEmpty(t *testing.T) {
-	k := securityKeyring{service: "svc"}
+/* An empty dump (no items of ours) is no keys and no error; metadata is never read. */
+func TestSecurityKeyringKeysAreEmptyWhenTheDumpHasNoneOfOurs(t *testing.T) {
+	k := securityKeyring{service: "svc", run: func(...string) ([]byte, int, error) {
+		return []byte("keychain: \"/x\"\nclass: \"genp\"\n    \"acct\"<blob>=\"a\"\n    \"svce\"<blob>=\"other\"\n"), 0, nil
+	}}
 	keys, err := k.Keys()
 	if err != nil || keys != nil {
 		t.Fatalf("Keys() = %v, %v", keys, err)
