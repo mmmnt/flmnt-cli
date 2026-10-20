@@ -33,7 +33,7 @@ func idToken(t *testing.T, claims string) string {
 	return "h." + base64url([]byte(claims)) + ".s"
 }
 
-var localMike = identity.Identity{Email: "mike@flmnt.ai", Marker: "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD"}
+var localMike = identity.Derive("ABB0B3CF-5122-5F8A-835B-A01323C6EDCD", "mike")
 
 func stubIdentity(t *testing.T, id identity.Identity, err error) {
 	t.Helper()
@@ -61,8 +61,8 @@ func decodeWhoami(t *testing.T, stdout string) map[string]string {
 /*
 The local helper learns who to mint for by asking exactly `flmnt whoami --json --client <tool>`: on
 
-	a loopback server the answer is the LOCAL LOGIN — the derived sub, the declared email, the client
-	id derived for that tool — and never anything from the hosted login.
+	a loopback server the answer is the LOCAL LOGIN — the derived sub and the client id derived for
+	that tool — and never anything from the hosted login.
 */
 func TestWhoamiJSONAnswersFromTheLocalLoginOnALoopbackServer(t *testing.T) {
 	stubIdentity(t, localMike, nil)
@@ -79,14 +79,14 @@ func TestWhoamiJSONAnswersFromTheLocalLoginOnALoopbackServer(t *testing.T) {
 		t.Fatalf("err %v stderr %q", err, stderr)
 	}
 	got := decodeWhoami(t, stdout)
-	want := map[string]string{"sub": localMike.Sub(), "email": "mike@flmnt.ai", "workspace": "bc674142", "client_id": localMike.ClientID("flmnt-cli")}
+	want := map[string]string{"sub": localMike.Sub, "workspace": "bc674142", "client_id": localMike.ClientID("flmnt-cli")}
+	if len(got) != len(want) {
+		t.Errorf("exactly {sub,workspace,client_id}; got %v", got)
+	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("%s = %q, want %q", k, got[k], v)
 		}
-	}
-	if _, present := got["username"]; present {
-		t.Errorf("username is unknown locally and must be omitted; got %v", got)
 	}
 }
 
@@ -105,7 +105,10 @@ func TestWhoamiJSONAnswersFromTheKeychainOnAHostedServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := decodeWhoami(t, stdout)
-	want := map[string]string{"sub": "u-123", "email": "mike@flmnt.ai", "username": "mike", "workspace": "729c1a1d", "client_id": "flmnt-cli"}
+	want := map[string]string{"sub": "u-123", "workspace": "729c1a1d", "client_id": "flmnt-cli"}
+	if len(got) != len(want) {
+		t.Errorf("no email, no username; got %v", got)
+	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("%s = %q, want %q", k, got[k], v)
@@ -139,7 +142,7 @@ func TestWhoamiJSONRefusesWhenThereIsNoLogin(t *testing.T) {
 	}
 }
 
-/* Plain whoami keeps its one line for both sources; locally the identity is the declared email. */
+/* Plain whoami keeps its one line for both sources; locally the identity is "local identity <sub>". */
 func TestWhoamiNamesTheLocalLoginOnALoopbackServer(t *testing.T) {
 	stubIdentity(t, localMike, nil)
 	stubKeychain(t, "", auth.ErrNotFound)
@@ -150,13 +153,13 @@ func TestWhoamiNamesTheLocalLoginOnALoopbackServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout, "mike@flmnt.ai") || !strings.Contains(stdout, "sift") {
+	if !strings.Contains(stdout, "local identity "+localMike.Sub) || !strings.Contains(stdout, "sift") {
 		t.Fatalf("got %q", stdout)
 	}
 
 	stubIdentity(t, identity.Identity{}, identity.ErrNotFound)
 	stdout, _, _ = runWhoami(t, "--server-url", "http://localhost:8000/mcp")
-	if !strings.Contains(stdout, "Not logged in") || !strings.Contains(stdout, "login --local") {
+	if !strings.Contains(stdout, "Not logged in") || !strings.Contains(stdout, "flmnt login --local") {
 		t.Fatalf("got %q", stdout)
 	}
 }
