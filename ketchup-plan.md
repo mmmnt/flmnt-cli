@@ -68,3 +68,19 @@ as the hosted login's; nothing runs a helper any more.
 - [x] Burst 23: the project chain is the same on every server — flag, repo pin, active workspace; `helperWorkspace` goes [depends: 11]
 - [x] Burst 24: `runAuthHelper`, `localCredentials`, `--auth-cmd`, `resolveAuthCmd`, `setup.FlmntEntry` removed [depends: 19-23]
 - [x] Burst 25: the url-only `.mcp.json` entry is asserted for both environments; README/npm README no longer name a helper [depends: 24]
+
+## Bottle 5.4 — identity and session are separate (founder rulings 2026-10-20; QRM-ADR-016 §5)
+
+v1.13.0 made "one login at a time" delete the local identity on a hosted login and on logout; ADR-016
+needs the identity AND a hosted token on the same machine at `sync push` and at the first team login.
+The identity is who the machine is; the session is which upstream is active. whoami answers by the
+session's kind — the v1.13.0 bug stays fixed by the kind, not by deleting the other credential.
+
+- [x] Burst 26: merge v1.13.0; `login --local` records the session first, then obtains the harness token for the session's server [depends: none]
+- [x] Burst 27: a hosted login replaces the session and keeps the local identity [depends: 26]
+- [x] Burst 28: `logout` ends the session, clears every token, keeps the identity and says so; the real sweep leaves local-identity.json [depends: 26]
+- [x] Burst 29: `logout --local` ends a local session only; a hosted session is left alone [depends: 28]
+- [x] Burst 30: identity.Remove and the cmd seam go — nothing removes the identity [depends: 27,29]
+- [x] Burst 31: whoami pinned: a hosted session answers hosted while the identity is present [depends: 27]
+- [x] Burst 32: README / npm README / help texts [depends: 26-31]
+- [ ] Burst 33 (ADR-016 §5, after the founder flips): the identity moves to the OS keychain under its OWN service (never "quorum-cli"; file backend outside ~/.filament/keyring) with a salt and an old→new history; `login --local --new` re-mints and records the relationship [depends: ruling]

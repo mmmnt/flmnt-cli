@@ -164,7 +164,7 @@ func init() {
 	loginCmd.Flags().String("client-id", "", "OAuth2 client ID")
 	loginCmd.Flags().Bool("device", false, "Use the device-authorization grant (headless, no browser)")
 	loginCmd.Flags().String("device-url", "", "Device-authorization endpoint (with --device)")
-	loginCmd.Flags().Bool("local", false, "record the local login (derived from this machine and the OS user) that a local flmnt mints credentials for")
+	loginCmd.Flags().Bool("local", false, "record the local identity (derived from this machine and the OS user) a local flmnt mints credentials for, and make the local server the session")
 	loginCmd.Flags().String("admin-url", localadmin.DefaultBaseURL, "with --local: the local broker's admin listener the CLI approves its own device code through")
 	rootCmd.AddCommand(loginCmd)
 }

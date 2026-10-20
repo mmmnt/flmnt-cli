@@ -76,13 +76,17 @@ for ad-hoc commands — it does not decide where a configured repo records.
 A checkout can run against a local flmnt instead of the hosted one. **The CLI holds one login at a
 time, and the login decides which.** `flmnt login` records a hosted session (the server it signed in
 to, who the token says you are, the OAuth endpoints); `flmnt login --local` records a local session
-(the loopback server, the derived sub). Either login replaces the other entirely — every stored token
-goes, the local login goes — and `flmnt logout` leaves nothing at all: the session, every token for
-every server, the local login, the file keyring of older builds. Every command takes its upstream from
-the session, so a logged-in person never passes `--server-url`; the chain is `--server-url` /
-`QUORUM_SERVER_URL` / **the login** / `.quorum.json` (the repo answers only when nothing is logged
-in). A loopback host — `http://localhost:8000/mcp` — is local, anything else is hosted. The hosted
-path is unchanged: credentials come from the keychain `flmnt login` filled.
+(the loopback server, the derived sub). Either login replaces the other's session entirely — every
+stored token for every server goes — and `flmnt logout` ends the session the same way: the config,
+every token, the file keyring of older builds. **The local identity is not a login and stays.** It is
+who this machine is (the derived `local_` sub); `flmnt login --local` records it once and reuses it
+ever after, a hosted login keeps it (a person signed in to the cloud still pushes and links their
+local records as it), and no logout removes it. `whoami` answers by the session's kind, never by which
+credential happens to exist. Every command takes its upstream from the session, so a logged-in person
+never passes `--server-url`; the chain is `--server-url` / `QUORUM_SERVER_URL` / **the login** /
+`.quorum.json` (the repo answers only when nothing is logged in). A loopback host —
+`http://localhost:8000/mcp` — is local, anything else is hosted. The hosted path is unchanged:
+credentials come from the keychain `flmnt login` filled.
 
 **Identity.** A local flmnt mints credentials for a declared person, never for a default:
 
@@ -90,7 +94,7 @@ path is unchanged: credentials come from the keychain `flmnt login` filled.
 flmnt login --local                           # once per machine and OS user — no input; also obtains the CLI's own local token
 flmnt local approve <code>                    # approve a client's pending sign-in (claude.ai, Claude Code) for the local login
 flmnt whoami --json --client flmnt-cli        # the identity as one JSON object, with the client id derived for a tool
-flmnt logout --local                          # end the local login
+flmnt logout --local                          # end a local session (the identity stays)
 ```
 
 `login --local` reads an identifying marker the machine already carries (macOS `IOPlatformUUID`,
@@ -166,8 +170,8 @@ flmnt <command> -h               # detailed help for a command
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless); becomes THE login
 flmnt login --local              # record the local login (derived from this machine + OS user) a local flmnt mints for; becomes THE login,
                                  # and obtains the CLI's own token from the local server (--admin-url, default http://127.0.0.1:4012)
-flmnt logout                     # sign out: clear the session, every stored token, and the local login
-flmnt logout --local             # remove only the local login
+flmnt logout                     # sign out: clear the session and every stored token; the local identity stays
+flmnt logout --local             # end only a local session
 flmnt whoami                     # show your identity (from the login; no --server-url needed) and which workspace is in force here
 flmnt whoami --json [--client <tool>]   # the identity as one JSON object (exit 1 when not logged in)
 

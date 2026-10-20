@@ -15,8 +15,9 @@ var whoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show the active identity and workspace",
 	Long: "Shows who is signed in and which workspace is in force here. The CLI holds one login at a\n" +
-		"time: after `flmnt login --local` the identity is the local login, after `flmnt login` the stored\n" +
-		"OAuth login, and no flag is needed to say which. Without a login, a loopback server (--server-url\n" +
+		"time and answers by its kind: after `flmnt login --local` the local identity, after `flmnt login`\n" +
+		"the stored OAuth login — never by which credential happens to exist, so the local identity a\n" +
+		"hosted login keeps is not what answers. Without a login, a loopback server (--server-url\n" +
 		"or QUORUM_SERVER_URL) reads as local and anything else as hosted.\n" +
 		"--json prints one object {sub,workspace,client_id?} for a headers-helper that\n" +
 		"mints a local credential as that person; --client <tool> adds the client id derived for that\n" +

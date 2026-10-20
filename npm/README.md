@@ -43,7 +43,7 @@ A local flmnt mints credentials for a declared person, never for a default, and 
 ```sh
 flmnt login --local                      # once per machine and OS user — no input, no email
 flmnt whoami --json --client flmnt-cli   # {"sub","workspace","client_id"} — the identity as one JSON object
-flmnt logout --local                     # end the local login
+flmnt logout --local                     # end a local session (the identity stays)
 ```
 
 `login --local` derives the identity from a marker the machine already carries (macOS `IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user: `sub = "local_" + UUIDv5(marker + OS user)`, and per tool `client_id = "local_" + UUIDv5(sub, tool)`. Only the digest is kept (`~/.filament/local-identity.json`); the same machine and user give the same sub forever, and two people or two machines never collide. No login, on either side, prints nothing on stdout, one reason on stderr, and exits 1.
@@ -70,7 +70,7 @@ flmnt <command> -h               # detailed help for a command
 flmnt login                      # authenticate via OAuth2 (browser PKCE, or --device for headless)
 flmnt login --local              # a local flmnt: derive this machine's identity, no input
 flmnt logout                     # sign out and revoke local credentials
-flmnt logout --local             # end the local login
+flmnt logout --local             # end a local session (the identity stays)
 flmnt whoami                     # show your identity and which workspace is in force here
 flmnt whoami --json [--client <tool>]   # {"sub","workspace","client_id"?} as one JSON object
 
