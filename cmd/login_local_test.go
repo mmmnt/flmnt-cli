@@ -143,11 +143,19 @@ func TestLoginLocalRecordsTheLoopbackServerNamedAndRefusesAHostedOne(t *testing.
 }
 
 /*
-A hosted login replaces the session the same way: the local login goes, every token goes before
-its own is stored, and the config records the hosted kind and who the token says we are.
+A hosted login replaces the SESSION the same way — every token goes before its own is stored, and the
+config records the hosted kind and who the token says we are — and keeps the local IDENTITY: who this
+machine is (the derived sub) is not a login, and a person who signs in to the cloud still needs it to
+push and link their local records (QRM-ADR-016). Founder ruling 2026-10-20: identity and session are
+separate; whoami answers by the session's kind, not by which credential survived.
 */
-func TestLoginHostedBecomesTheSessionAndClearsTheLocalLogin(t *testing.T) {
+func TestLoginHostedBecomesTheSessionAndKeepsTheLocalIdentity(t *testing.T) {
 	stubLoginSeams(t)
+	t.Setenv("HOME", t.TempDir())
+	identityRemove = identity.Remove
+	if err := identity.Save(localMike); err != nil {
+		t.Fatal(err)
+	}
 	origPKCE, origStore := loginRunPKCEFlow, loginStoreToken
 	t.Cleanup(func() { loginRunPKCEFlow, loginStoreToken = origPKCE, origStore })
 	loginRunPKCEFlow = func(auth.PKCEConfig, func(string) error) (auth.TokenSet, error) {
@@ -156,7 +164,6 @@ func TestLoginHostedBecomesTheSessionAndClearsTheLocalLogin(t *testing.T) {
 	order := []string{}
 	loginStoreToken = func(string, auth.TokenSet) error { order = append(order, "store"); return nil }
 	loginDeleteAllTokens = func() ([]string, error) { order = append(order, "wipe"); return nil, nil }
-	identityRemove = func() error { order = append(order, "remove-local"); return nil }
 	loginLoadConfig = func() (auth.CLIConfig, error) {
 		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: "http://localhost:8000", ActiveWorkspaceID: "ws-local"}, nil
 	}
@@ -167,8 +174,11 @@ func TestLoginHostedBecomesTheSessionAndClearsTheLocalLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(order, ",") != "wipe,remove-local,store" {
-		t.Errorf("the previous session is cleared before the new token is stored; got %v", order)
+	if strings.Join(order, ",") != "wipe,store" {
+		t.Errorf("every token is cleared before the new one is stored; got %v", order)
+	}
+	if kept, err := identity.Load(); err != nil || kept.Sub != localMike.Sub {
+		t.Errorf("the local identity must survive a hosted login; got %+v %v", kept, err)
 	}
 	if saved.Login != auth.LoginHosted || saved.ServerURL != "https://mcp.production.flmnt.ai" || saved.Sub != "u-123" || saved.Identity != "mike@flmnt.ai" || saved.LoggedInAt != "2026-10-20T16:00:00Z" {
 		t.Errorf("session recorded %+v", saved)

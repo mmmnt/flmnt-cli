@@ -92,12 +92,10 @@ var loginCmd = &cobra.Command{
 		}
 
 		// One login at a time: this login replaces whatever session was here — every token stored for
-		// any server, and the local login — before its own token is stored.
+		// any server — before its own token is stored. The local identity is not a session and stays:
+		// a person signed in to the cloud still pushes and links their local records as it.
 		if _, err := loginDeleteAllTokens(); err != nil {
 			return fmt.Errorf("clearing the previous login: %w", err)
-		}
-		if err := identityRemove(); err != nil {
-			return fmt.Errorf("clearing the previous local login: %w", err)
 		}
 		if err := loginStoreToken(serverURL, tokens); err != nil {
 			return fmt.Errorf("storing token: %w", err)
