@@ -6,6 +6,7 @@
 package localadmin
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,4 +69,28 @@ func decode(resp *http.Response, out any) error {
 	}
 	e.Status = resp.StatusCode
 	return &e
+}
+
+// Approve asks POST /local/approve {code, sub, client_id}: the broker approves the code for the
+// identity the CLI supplies — the local login's sub and the client id derived for the tool
+// (SPEC-LOCAL-003). An answer that is not {status: "approved"} is not an approval.
+func Approve(baseURL, code, sub, clientID string) error {
+	body, err := json.Marshal(map[string]string{"code": code, "sub": sub, "client_id": clientID})
+	if err != nil {
+		return err
+	}
+	resp, err := httpx.Client.Post(strings.TrimRight(baseURL, "/")+"/local/approve", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	var out struct {
+		Status string `json:"status"`
+	}
+	if err := decode(resp, &out); err != nil {
+		return err
+	}
+	if out.Status != "approved" {
+		return fmt.Errorf("admin listener answered status %q, not approved", out.Status)
+	}
+	return nil
 }
