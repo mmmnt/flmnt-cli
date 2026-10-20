@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
@@ -159,7 +156,7 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	if err != nil {
 		return sync.Endpoint{}, err
 	}
-	authValue, err := runAuthHelper(authCmd)
+	headers, err := runAuthHelper(authCmd)
 	if err != nil {
 		return sync.Endpoint{}, fmt.Errorf("local auth (%q): %w", authCmd, err)
 	}
@@ -167,26 +164,7 @@ func resolveLocalEndpoint(cmd *cobra.Command) (sync.Endpoint, error) {
 	if endpoint == "" {
 		return sync.Endpoint{}, fmt.Errorf("no local GraphQL endpoint for %s", url)
 	}
-	return sync.Endpoint{GQL: apiclient.New(endpoint, strings.TrimPrefix(authValue, "Bearer ")), Workspace: workspace, Ref: url}, nil
-}
-
-// runAuthHelper runs a headers-helper command and extracts the Authorization
-// header from its JSON stdout (e.g. {"Authorization": "Bearer ..."}).
-func runAuthHelper(command string) (string, error) {
-	out, err := exec.Command("sh", "-c", command).Output()
-	if err != nil {
-		return "", err
-	}
-	var headers map[string]string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &headers); err != nil {
-		return "", fmt.Errorf("auth helper did not print JSON headers: %w", err)
-	}
-	for k, v := range headers {
-		if strings.EqualFold(k, "Authorization") {
-			return v, nil
-		}
-	}
-	return "", fmt.Errorf("auth helper output has no Authorization header")
+	return sync.Endpoint{GQL: apiclient.New(endpoint, headers.Bearer), Workspace: workspace, Ref: url}, nil
 }
 
 func init() {

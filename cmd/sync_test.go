@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
@@ -27,13 +28,16 @@ func TestResolveAuthCmd(t *testing.T) {
 	}
 }
 
-func TestRunAuthHelperExtractsAuthorizationHeader(t *testing.T) {
-	got, err := runAuthHelper(`echo '{"Authorization": "Bearer LOCALTOK", "X-Workspace-Id": "quorum"}'`)
+func TestRunAuthHelperExtractsAuthorizationAndWorkspace(t *testing.T) {
+	got, err := runAuthHelper(`echo '{"Authorization": "Bearer LOCALTOK", "X-Workspace-Id": "bc674142-782e-4fc3-aa79-585d12ff2d96"}'`)
 	if err != nil {
 		t.Fatalf("runAuthHelper: %v", err)
 	}
-	if got != "Bearer LOCALTOK" {
-		t.Fatalf("got %q, want Bearer LOCALTOK", got)
+	if got.Bearer != "LOCALTOK" {
+		t.Fatalf("bearer %q, want LOCALTOK", got.Bearer)
+	}
+	if got.Workspace != "bc674142-782e-4fc3-aa79-585d12ff2d96" {
+		t.Fatalf("workspace %q, want the helper's X-Workspace-Id", got.Workspace)
 	}
 }
 
@@ -46,6 +50,33 @@ func TestRunAuthHelperErrorsWhenNoAuthorizationHeader(t *testing.T) {
 func TestRunAuthHelperErrorsOnNonJSON(t *testing.T) {
 	if _, err := runAuthHelper(`echo not-json`); err == nil {
 		t.Fatal("expected error on non-JSON helper output")
+	}
+}
+
+/*
+The helper's token carries the ACTOR, and the harness attributes every write from it. Claude Code's
+
+	entry mints for its own client id; the CLI must be minted for ITS registered client id — the one
+	its hosted writes carry — or local entries read as Claude Code's. Founder ruling 2026-10-19.
+*/
+func TestRunAuthHelperDeclaresTheCLIsClientIDToTheHelper(t *testing.T) {
+	got, err := runAuthHelper(`printf '{"Authorization": "Bearer %s"}' "$BROKER_CLIENT_ID"`)
+	if err != nil {
+		t.Fatalf("runAuthHelper: %v", err)
+	}
+	if got.Bearer != "flmnt-cli" {
+		t.Fatalf("the helper saw BROKER_CLIENT_ID=%q, want flmnt-cli", got.Bearer)
+	}
+}
+
+/* The helper refuses with a reason when the identity is not declared; that reason is the error, not a default. */
+func TestRunAuthHelperCarriesTheHelpersReason(t *testing.T) {
+	_, err := runAuthHelper(`echo 'mint-token: no identity declared — run flmnt login' >&2; exit 1`)
+	if err == nil {
+		t.Fatal("expected the helper's refusal to be an error")
+	}
+	if !strings.Contains(err.Error(), "no identity declared") {
+		t.Fatalf("the helper's stderr line must be surfaced; got %v", err)
 	}
 }
 
