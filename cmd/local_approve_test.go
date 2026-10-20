@@ -187,3 +187,58 @@ func TestLocalApproveApprovesADeviceCodeForTheCLITool(t *testing.T) {
 		t.Fatalf("a device approval has no browser to return to: %q", stdout)
 	}
 }
+
+/* No local login, no approval: the refusal names the login to run, and the admin listener is never asked. */
+func TestLocalApproveRefusesWithoutALocalLoginBeforeAnyRequest(t *testing.T) {
+	stubLocalIdentity(t, identity.Identity{}, identity.ErrNotFound)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++ }))
+	t.Cleanup(srv.Close)
+
+	_, err := runLocalApprove(t, "y\n", "BCDF-GHJK", "--admin-url", srv.URL, "--yes")
+	if err == nil || !strings.Contains(err.Error(), identity.ErrNotFound.Error()) {
+		t.Fatalf("want the missing-login refusal, got %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("the admin listener must not be asked without a login; %d calls", calls)
+	}
+}
+
+/*
+The broker's refusal is the answer, verbatim — code and message — whether it comes from the lookup
+
+	(unknown, expired, not loopback) or from the approval (already approved, an identity the broker
+	does not accept). Nothing is rephrased, so the person reads what the broker said.
+*/
+func TestLocalApproveSurfacesEveryRefusalVerbatim(t *testing.T) {
+	stubLocalIdentity(t, identity.Identity{Sub: testLocalSub}, nil)
+	lookup := []struct {
+		status int
+		code   string
+	}{{404, "LOCAL_APPROVAL_UNKNOWN"}, {410, "LOCAL_APPROVAL_EXPIRED"}, {403, "LOCAL_ADMIN_NOT_LOOPBACK"}}
+	for _, tc := range lookup {
+		admin := &adminFixture{pendingStatus: tc.status, pendingBody: `{"code":"` + tc.code + `","message":"the broker's own words"}`}
+		_, err := runLocalApprove(t, "y\n", "BCDF-GHJK", "--admin-url", admin.serve(t), "--yes")
+		if err == nil || err.Error() != tc.code+": the broker's own words" {
+			t.Errorf("%s on lookup: got %v", tc.code, err)
+		}
+		if len(admin.approved) != 0 {
+			t.Errorf("%s on lookup: nothing may be posted after a refused lookup", tc.code)
+		}
+	}
+	approval := []struct {
+		status int
+		code   string
+	}{{409, "LOCAL_APPROVAL_ALREADY_APPROVED"}, {400, "LOCAL_SUB_INVALID"}, {400, "LOCAL_CLIENT_INVALID"}, {404, "LOCAL_APPROVAL_UNKNOWN"}, {410, "LOCAL_APPROVAL_EXPIRED"}, {403, "LOCAL_ADMIN_NOT_LOOPBACK"}}
+	for _, tc := range approval {
+		admin := pendingAuthorization()
+		admin.approveStatus, admin.approveBody = tc.status, `{"code":"`+tc.code+`","message":"the broker's own words"}`
+		stdout, err := runLocalApprove(t, "y\n", "BCDF-GHJK", "--admin-url", admin.serve(t), "--yes")
+		if err == nil || err.Error() != tc.code+": the broker's own words" {
+			t.Errorf("%s on approve: got %v", tc.code, err)
+		}
+		if strings.Contains(stdout, "Approved.") {
+			t.Errorf("%s on approve: must not claim approval: %q", tc.code, stdout)
+		}
+	}
+}
