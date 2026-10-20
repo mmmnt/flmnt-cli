@@ -92,6 +92,7 @@ credentials come from the keychain `flmnt login` filled.
 
 ```sh
 flmnt login --local                           # once per machine and OS user — no input; also obtains the CLI's own local token
+flmnt login --local --new                     # mint a new local identity (new salt, new sub); the old sub stays in the history
 flmnt local approve <code>                    # approve a client's pending sign-in (claude.ai, Claude Code) for the local login
 flmnt local claim <code> --server-url <url>   # from YOUR machine: claim a code shown by a teammate's flmnt for your identity, before they approve
 flmnt whoami --json --client flmnt-cli        # the identity as one JSON object, with the client id derived for a tool
@@ -103,9 +104,16 @@ Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user, and derives, de
 `sub = "local_" + UUIDv5(c0a3f0d2-5b1e-4d7a-9c3e-2f6b8a1d4e70, marker + "\n" + osUser)` and
 `client_id = "local_" + UUIDv5(sub's UUID, <tool name>)`. The same machine and user give the same sub
 forever, a tool name the same client id forever, and two people or two machines never collide; the
-`local_` prefix lets the hosted side recognise a local identity without a lookup. Only the digest is
-kept — `~/.filament/local-identity.json` (0600) holds `{sub, created_at}`, never the marker — and that
-file is what makes the login explicit. A machine with no readable marker is refused; nothing is
+`local_` prefix lets the hosted side recognise a local identity without a lookup. A new identity also
+carries a random salt in the derivation (`marker + "\n" + osUser + "\n" + salt`), so no two logins
+ever collide — not two people on cloned machine ids, not two logins of one person (QRM-ADR-016 §5g);
+identities recorded before the salt keep their sub. Only the digest is kept, in the OS keychain under
+its own service `flmnt-identity` (never the tokens' `quorum-cli`, which a logout sweeps), with
+`~/.filament/local-identity.json` (0600) as a cache of it holding `{sub, created_at, salt?, history?}`,
+never the marker. `flmnt login --local --new` mints a new identity on purpose — after a refused
+connection on a teammate's harness, or for a fresh start — and keeps the old sub in the identity's
+history, which `whoami` shows (`formerly local_…`) and which the link request will carry, so nobody
+is ever asked which UUID was theirs. A machine with no readable marker is refused; nothing is
 generated at random and nothing is reused from the hosted login. `login --local` takes the loopback
 server from `--server-url` / `QUORUM_SERVER_URL` when one is named (a hosted URL is refused), else
 `http://localhost:8000`, and records it as the session's server. `whoami --json` prints one object
