@@ -115,3 +115,28 @@ func TestLocalCredentialsCarryTheHelpersWorkspace(t *testing.T) {
 }
 
 func base64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+/*
+The project fallback of last resort was the machine-wide ACTIVE workspace — a hosted setting that
+
+	names nothing on the harness. On a loopback server the helper's X-Workspace-Id is the workspace the
+	MCP scopes the session to, so it is the fallback there; the hosted chain is unchanged.
+*/
+func TestResolveProjectFallsBackToTheHelpersWorkspaceOnALoopbackServer(t *testing.T) {
+	stubHelper(t, helperPrinting(t, "T"))
+	origCfg := authHeaderLoadConfig
+	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
+		return auth.CLIConfig{ActiveWorkspaceID: "729c1a1d"}, nil
+	}
+	t.Cleanup(func() { authHeaderLoadConfig = origCfg })
+	t.Setenv("QUORUM_SERVER_URL", "http://localhost:8000/mcp")
+
+	if got := resolveProject(briefCmd, t.TempDir()); got != "ws-local" {
+		t.Fatalf("got %q, want the helper's workspace", got)
+	}
+
+	t.Setenv("QUORUM_SERVER_URL", "https://mcp.production.flmnt.ai/mcp")
+	if got := resolveProject(briefCmd, t.TempDir()); got != "729c1a1d" {
+		t.Fatalf("got %q, want the active workspace for a hosted server", got)
+	}
+}

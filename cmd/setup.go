@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
 )
@@ -104,7 +105,8 @@ func resolveGateCmd() (string, error) {
 }
 
 // resolveProject picks the flmnt project for derive/brief: the --project flag, else the repo's
-// project_id (written by `flmnt setup --project`), else the active workspace.
+// project_id (written by `flmnt setup --project`), else the helper's workspace on a loopback server,
+// else the active workspace.
 func resolveProject(cmd *cobra.Command, repoDir string) string {
 	flag, _ := cmd.Flags().GetString("project")
 	pinned := ""
@@ -122,7 +124,24 @@ func resolveProject(cmd *cobra.Command, repoDir string) string {
 	if resolved != "" {
 		return resolved
 	}
+	if ws := helperWorkspace(cmd); ws != "" {
+		return ws
+	}
 	return resolveActiveWorkspace(cmd)
+}
+
+// helperWorkspace is the workspace the headers-helper scopes a loopback session to. The active
+// workspace is a hosted setting and names nothing on the harness, so the helper's answer comes first
+// there; for a hosted server it is not consulted.
+func helperWorkspace(cmd *cobra.Command) string {
+	if !httpx.IsLoopback(resolveRemoteServerURL(cmd)) {
+		return ""
+	}
+	h, err := localCredentials(cmd, "")
+	if err != nil {
+		return ""
+	}
+	return h.Workspace
 }
 
 // errNoWorkspaceClient marks resolution as UNAVAILABLE rather than failed — offline, no credentials,
