@@ -14,6 +14,9 @@ import (
 	"github.com/mmmnt/flmnt-cli/internal/localadmin"
 )
 
+// Error is the broker's refusal, as the admin client carries it.
+type Error = localadmin.Error
+
 // Authorization is what a code is waiting for, as the dialer may see it: the client's registered
 // name and redirect URI, the words the host's prompt shows. Nothing else is told.
 type Authorization struct {
