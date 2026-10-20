@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mmmnt/flmnt-cli/internal/health"
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,7 @@ func HealthEnvironmentLine(serverURL string) string {
 	switch {
 	case serverURL == "":
 		return "environment  unresolved — no server URL (flmnt login, QUORUM_SERVER_URL, --server-url or flmnt setup)"
-	case isLoopback(serverURL):
+	case httpx.IsLoopback(serverURL):
 		return fmt.Sprintf("environment  local (%s)", serverURL)
 	default:
 		return fmt.Sprintf("environment  hosted (%s)", serverURL)

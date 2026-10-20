@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/mmmnt/flmnt-cli/internal/httpx"
 )
 
 // MCPServer is the `flmnt` entry of a checkout's .mcp.json as the CLI reads it: the MCP the session
@@ -36,4 +38,13 @@ func FlmntEntry(dir string) (MCPServer, error) {
 		return MCPServer{}, err
 	}
 	return server, nil
+}
+
+// KeepsLocalEntry says whether setup leaves the checkout's `flmnt` entry alone: a loopback entry that
+// carries a headersHelper is the local harness's own declaration — scripts/env.sh reads its host to
+// resolve the environment and the helper mints the harness credentials — so rewriting it to the
+// hosted URL would move the session and drop the helper in one step.
+func KeepsLocalEntry(dir string) bool {
+	entry, err := FlmntEntry(dir)
+	return err == nil && entry.HeadersHelper != "" && httpx.IsLoopback(entry.URL)
 }

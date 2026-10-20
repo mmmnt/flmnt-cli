@@ -67,6 +67,8 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 		fmt.Fprintf(out, "  project                → %s (%s) — this repo records here regardless of the active workspace\n", projectName, projectID)
 		if proxy {
 			fmt.Fprintf(out, "  .mcp.json              → flmnt-proxy @ http://localhost:%d/mcp (run `flmnt proxy`; other servers preserved)\n", proxyPort)
+		} else if setup.KeepsLocalEntry("") {
+			fmt.Fprintf(out, "  .mcp.json              → flmnt kept as is (a local entry with its own headersHelper; the repo config records %s)\n", serverURL)
 		} else {
 			fmt.Fprintf(out, "  .mcp.json              → flmnt (direct, OAuth on first /mcp; other servers preserved)\n")
 		}

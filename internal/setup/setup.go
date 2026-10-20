@@ -134,10 +134,14 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 //
 // Default (direct) mode also drops a stale setup-written `flmnt-proxy` entry so switching off
 // --proxy doesn't leave a dead duplicate connection. `flmnt-proxy` is a setup-only name, so
-// removing it never touches a user's own server.
+// removing it never touches a user's own server. A loopback `flmnt` entry with a headersHelper is
+// the checkout's own (KeepsLocalEntry) and the file is left untouched.
 func writeMCPJSON(dir string, cfg Config) error {
 	path := filepath.Join(dir, ".mcp.json")
 
+	if !cfg.Proxy && KeepsLocalEntry(dir) {
+		return nil
+	}
 	managed, entry, err := managedServer(cfg)
 	if err != nil {
 		return err
