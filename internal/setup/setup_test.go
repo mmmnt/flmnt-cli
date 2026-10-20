@@ -362,3 +362,23 @@ func TestRunPreservesTheLocalGraphQLEndpointDeclaration(t *testing.T) {
 		t.Fatalf("got %+v err %v", pc, err)
 	}
 }
+
+/*
+The `flmnt` entry setup writes is URL-ONLY in both environments — `{"type":"http","url":<server>}` —
+
+	no headersHelper and no headers (QRM-ADR-015 §1). A local server authorizes the way a hosted one
+	does: the client runs the OAuth flow the MCP advertises, and a loopback `flmnt local approve`
+	stands in for the browser.
+*/
+func TestRunWritesAURLOnlyFlmntEntryForLocalAndHostedServers(t *testing.T) {
+	for _, server := range []string{"http://localhost:8000/mcp", "https://mcp.production.flmnt.ai/mcp"} {
+		dir := t.TempDir()
+		if err := Run(Config{ServerURL: server, ProjectID: "p", ProxyPort: 9876, Dir: dir}); err != nil {
+			t.Fatalf("Run(%s): %v", server, err)
+		}
+		f := readMCPServers(t, dir)["flmnt"]
+		if len(f) != 2 || f["type"] != "http" || f["url"] != server {
+			t.Errorf("%s: want exactly {type:http,url:%s}, got %v", server, server, f)
+		}
+	}
+}
