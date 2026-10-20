@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 	"github.com/mmmnt/flmnt-cli/internal/health"
@@ -17,7 +18,7 @@ var healthCmd = &cobra.Command{
 	Long: "Probes /health on the configured server — the local harness when the server URL is loopback,\n" +
 		"the hosted MCP otherwise — and says which environment that is. CORE_URL, ENGINE_URL and\n" +
 		"QUORUM_PROXY_PORT add probes for the older host-port local stack only when they are set. On a\n" +
-		"local server the headers-helper is reported too: the actor it minted for, or its reason.",
+		"local server the stored local token is reported too: who it is for, or that there is none.",
 	Run: func(cmd *cobra.Command, args []string) {
 		serverURL := resolveAuthServerURL(cmd)
 		cfg := health.Config{
@@ -30,7 +31,7 @@ var healthCmd = &cobra.Command{
 		}
 		results := health.Check(cfg)
 		if httpx.IsLoopback(serverURL) {
-			results = append(results, helperResult(cmd))
+			results = append(results, localTokenResult(cmd, serverURL))
 		}
 		out := cmd.OutOrStdout()
 		fmt.Fprintln(out, HealthEnvironmentLine(serverURL))
@@ -52,19 +53,19 @@ func HealthEnvironmentLine(serverURL string) string {
 	}
 }
 
-// helperResult reports the checkout's headers-helper — the harness credential. A helper that refuses
-// (no identity declared, no client id) exits with its reason, and that reason is what is shown; the
-// hooks that use the credential stay quiet by contract, so this is where the refusal surfaces.
-func helperResult(cmd *cobra.Command) health.Result {
-	h, err := localCredentials(cmd, "")
-	if err != nil {
-		return health.Result{Service: "helper", OK: false, Message: err.Error()}
+// localTokenResult reports the harness credential: the token `flmnt login --local` stored under the
+// server URL. The hooks that use it stay quiet by contract, so an absent token would otherwise
+// surface nowhere; this is where it does, with the login that fills it.
+func localTokenResult(cmd *cobra.Command, serverURL string) health.Result {
+	bearer := keychainBearer(cmd, serverURL)
+	if bearer == "" {
+		return health.Result{Service: "token", OK: false, Message: loginRequired(serverURL).Error()}
 	}
-	actor := "minted"
-	if claims, derr := auth.DecodeUnverified(h.Bearer); derr == nil {
-		actor = "minted for " + identityOf(claims)
+	actor := "present"
+	if claims, err := auth.DecodeUnverified(strings.TrimPrefix(bearer, "Bearer ")); err == nil {
+		actor = "present for " + identityOf(claims)
 	}
-	return health.Result{Service: "helper", OK: true, Message: actor}
+	return health.Result{Service: "token", OK: true, Message: actor}
 }
 
 func RenderHealth(w io.Writer, results []health.Result) bool {
@@ -72,7 +73,7 @@ func RenderHealth(w io.Writer, results []health.Result) bool {
 	for _, r := range results {
 		if !r.OK {
 			allOK = false
-			localDown = localDown || (r.Service != "mcp" && r.Service != "helper")
+			localDown = localDown || (r.Service != "mcp" && r.Service != "token")
 		}
 	}
 	if localDown {
@@ -80,7 +81,7 @@ func RenderHealth(w io.Writer, results []health.Result) bool {
 	}
 	for _, r := range results {
 		status := "ok"
-		if r.Service == "helper" && r.OK {
+		if r.Service == "token" && r.OK {
 			status = "ok — " + r.Message
 		}
 		if !r.OK {
