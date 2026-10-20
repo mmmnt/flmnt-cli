@@ -65,12 +65,45 @@ func TestLoginLocalDerivesAndRecordsTheSub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := identity.Derive(testMarker, "mike").Sub
-	if saved.Sub != want || saved.CreatedAt == "" {
-		t.Fatalf("saved %+v, want sub %s", saved, want)
+	if saved.Salt == "" || saved.CreatedAt == "" {
+		t.Fatalf("a first login mints a salted identity (QRM-ADR-016 §5g); saved %+v", saved)
 	}
-	if !strings.Contains(stdout, want) {
+	if want := identity.DeriveSalted(testMarker, "mike", saved.Salt).Sub; saved.Sub != want || saved.Sub == identity.Derive(testMarker, "mike").Sub {
+		t.Fatalf("saved %+v, want the salted derivation %s", saved, want)
+	}
+	if !strings.Contains(stdout, saved.Sub) {
 		t.Fatalf("the derived sub must be printed; got %q", stdout)
+	}
+}
+
+/*
+`login --local --new` re-mints on purpose — after a refused connection on a teammate's harness, or for a
+
+	fresh start: a new salt, a new sub, and the old sub kept in the identity's history and named in
+	the output, so no one is ever asked which UUID was theirs (QRM-ADR-016 §5g).
+*/
+func TestLoginLocalNewRemintsAndKeepsTheOldSubInTheHistory(t *testing.T) {
+	saved := stubLocalLoginSeams(t)
+	deviceFlowNeverRuns(t)
+	held := identity.Derive(testMarker, "mike")
+	held.CreatedAt = "2026-10-20T16:49:09Z"
+	identityLoad = func() (identity.Identity, error) { return held, nil }
+
+	stdout, err := runLogin(t, "--local", "--new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Sub == held.Sub || saved.Salt == "" || len(saved.History) != 1 || saved.History[0].Sub != held.Sub || saved.History[0].ReplacedAt != "2026-10-20T16:00:00Z" {
+		t.Fatalf("saved %+v", *saved)
+	}
+	if !strings.Contains(stdout, saved.Sub) || !strings.Contains(stdout, "formerly answered as "+held.Sub) {
+		t.Fatalf("the output names the new sub and the one it replaces: %q", stdout)
+	}
+
+	again := stubLocalLoginSeams(t)
+	identityLoad = func() (identity.Identity, error) { return held, nil }
+	if _, err := runLogin(t, "--local"); err != nil || again.Sub != "" {
+		t.Fatalf("without --new a held identity is reused, never re-minted: %v %+v", err, *again)
 	}
 }
 
@@ -99,6 +132,7 @@ email from an old production token — can answer for this person again.
 func TestLoginLocalBecomesTheSessionAndClearsTheHostedLogin(t *testing.T) {
 	stubLocalLoginSeams(t)
 	deviceFlowNeverRuns(t)
+	identityLoad = func() (identity.Identity, error) { return localMike, nil }
 	var saved auth.CLIConfig
 	loginSaveConfig = func(c auth.CLIConfig) error { saved = c; return nil }
 	wiped := false
@@ -155,7 +189,7 @@ separate; whoami answers by the session's kind, not by which credential survived
 */
 func TestLoginHostedBecomesTheSessionAndKeepsTheLocalIdentity(t *testing.T) {
 	stubLoginSeams(t)
-	t.Setenv("HOME", t.TempDir())
+	stubIdentityRing(t)
 	if err := identity.Save(localMike); err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +248,7 @@ identity: who this machine is outlives every login.
 */
 func TestLogoutLocalEndsTheLocalSessionAndKeepsTheIdentity(t *testing.T) {
 	stubLogoutSeams(t)
-	t.Setenv("HOME", t.TempDir())
+	stubIdentityRing(t)
 	if err := identity.Save(localMike); err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +442,7 @@ re-derives), so a later salted identity has one and the same path. Nothing is re
 func TestLoginLocalReusesTheRecordedIdentity(t *testing.T) {
 	saved := stubLocalLoginSeams(t)
 	deviceFlowNeverRuns(t)
-	t.Setenv("HOME", t.TempDir())
+	stubIdentityRing(t)
 	identityLoad = identity.Load
 	recorded := identity.Derive("ANOTHER-MARKER", "mike")
 	if err := identity.Save(recorded); err != nil {

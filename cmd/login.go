@@ -166,5 +166,6 @@ func init() {
 	loginCmd.Flags().String("device-url", "", "Device-authorization endpoint (with --device)")
 	loginCmd.Flags().Bool("local", false, "record the local identity (derived from this machine and the OS user) a local flmnt mints credentials for, and make the local server the session")
 	loginCmd.Flags().String("admin-url", localadmin.DefaultBaseURL, "with --local: the local broker's admin listener the CLI approves its own device code through")
+	loginCmd.Flags().Bool("new", false, "with --local: mint a new local identity (a fresh salt, a new sub) and keep the old sub in the identity's history")
 	rootCmd.AddCommand(loginCmd)
 }

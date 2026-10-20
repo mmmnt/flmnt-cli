@@ -128,6 +128,11 @@ const ringKey = "identity"
 // OpenRing is the identity's keyring; a test points it at an in-memory ring.
 var OpenRing = auth.OpenIdentityRing
 
+// StorageDescription names where the identity is kept on this build and platform.
+func StorageDescription() string {
+	return auth.IdentityStorageDescription()
+}
+
 // Save writes the identity to the keychain and refreshes the file cache.
 func Save(i Identity) error {
 	raw, err := json.MarshalIndent(i, "", "  ")

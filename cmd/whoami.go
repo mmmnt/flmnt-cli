@@ -43,6 +43,9 @@ var whoamiCmd = &cobra.Command{
 				return nil
 			}
 			who = "local identity " + id.Sub
+			if formerly := id.Formerly(); len(formerly) > 0 {
+				who += " (formerly " + joinComma(formerly) + ")"
+			}
 		} else {
 			tokens, err := authHeaderLoadToken(serverURL)
 			if err != nil {

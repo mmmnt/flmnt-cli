@@ -48,7 +48,7 @@ separate).
 */
 func TestLogoutClearsEveryTokenAndTheSessionAndKeepsTheLocalIdentity(t *testing.T) {
 	stubLogoutSeams(t)
-	t.Setenv("HOME", t.TempDir())
+	stubIdentityRing(t)
 	if err := identity.Save(localMike); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestLogoutClearsEveryTokenAndTheSessionAndKeepsTheLocalIdentity(t *testing.
 /* With no local identity on the machine, the line says nothing remains. */
 func TestLogoutLineSaysNothingRemainsOnlyWithoutAnIdentity(t *testing.T) {
 	stubLogoutSeams(t)
-	t.Setenv("HOME", t.TempDir())
+	stubIdentityRing(t)
 	stdout, err := runLogout(t)
 	if err != nil || !strings.Contains(stdout, "Nothing remains.") {
 		t.Fatalf("err %v stdout %q", err, stdout)

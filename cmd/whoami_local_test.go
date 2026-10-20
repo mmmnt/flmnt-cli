@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
 	"github.com/mmmnt/flmnt-cli/internal/identity"
@@ -251,5 +252,20 @@ func TestWhoamiAnswersFromTheHostedSessionWhileTheLocalIdentityIsPresent(t *test
 	}
 	if got := decodeWhoami(t, stdout); got["sub"] != "u-123" || got["client_id"] != "flmnt-cli" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+/* whoami names the subs this machine formerly answered as, so the history is in plain sight. */
+func TestWhoamiNamesTheFormerSubs(t *testing.T) {
+	former := identity.Derive("ABB0B3CF-5122-5F8A-835B-A01323C6EDCD", "mike")
+	current := identity.Remint(former, "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD", "mike", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))
+	stubIdentity(t, current, nil)
+	stubConfig(t, auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL, Sub: current.Sub})
+	t.Setenv("QUORUM_SERVER_URL", "")
+	t.Chdir(t.TempDir())
+
+	stdout, _, err := runWhoami(t)
+	if err != nil || !strings.Contains(stdout, "local identity "+current.Sub+" (formerly "+former.Sub+")") {
+		t.Fatalf("err %v stdout %q", err, stdout)
 	}
 }

@@ -8,11 +8,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/99designs/keyring"
 	"github.com/mmmnt/flmnt-cli/internal/identity"
 	"github.com/spf13/pflag"
 )
 
 const testLocalSub = "local_34f68591-fdb4-5336-aa6a-d772cca9bd8a"
+
+// stubIdentityRing gives a test an in-memory identity keyring and a fresh HOME, so identity.Save and
+// identity.Load never reach the real keychain.
+func stubIdentityRing(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	ring := keyring.NewArrayKeyring(nil)
+	orig := identity.OpenRing
+	identity.OpenRing = func() (keyring.Keyring, error) { return ring, nil }
+	t.Cleanup(func() { identity.OpenRing = orig })
+}
 
 // stubLocalIdentity makes the local login the given identity (or its absence).
 func stubLocalIdentity(t *testing.T, id identity.Identity, err error) {

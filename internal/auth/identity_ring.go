@@ -34,3 +34,16 @@ var OpenIdentityRing = func() (keyring.Keyring, error) {
 	}
 	return keyring.Open(identityKeychainConfig())
 }
+
+// IdentityStorageDescription names where the identity is kept: the OS keychain, or its own encrypted
+// file directory on a build or platform without one.
+func IdentityStorageDescription() string {
+	if usingSecurityKeychain() {
+		return "the macOS Keychain (service flmnt-identity)"
+	}
+	cfg := identityKeychainConfig()
+	if effectiveBackend() == keyring.FileBackend {
+		return "an encrypted file in " + cfg.FileDir
+	}
+	return "the OS keychain (service flmnt-identity)"
+}

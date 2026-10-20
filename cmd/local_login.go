@@ -32,7 +32,8 @@ func runLocalLogin(cmd *cobra.Command) error {
 	if !httpx.IsLoopback(serverURL) {
 		return fmt.Errorf("local login refused: %s is not a loopback server (a local login is for a local flmnt; `flmnt login` signs in to a hosted one)", serverURL)
 	}
-	id, err := recordedOrDerivedIdentity()
+	renew, _ := cmd.Flags().GetBool("new")
+	id, err := recordedOrDerivedIdentity(renew)
 	if err != nil {
 		return err
 	}
@@ -44,9 +45,11 @@ func runLocalLogin(cmd *cobra.Command) error {
 	if err := loginSaveConfig(session); err != nil {
 		return fmt.Errorf("recording the session: %w", err)
 	}
-	path, _ := identity.Path()
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Local login recorded: sub %s → %s\n", id.Sub, path)
+	fmt.Fprintf(out, "Local login recorded: sub %s (kept in %s)\n", id.Sub, identity.StorageDescription())
+	if formerly := id.Formerly(); len(formerly) > 0 {
+		fmt.Fprintf(out, "This machine formerly answered as %s; the history travels with the identity so those records link to the same account.\n", joinComma(formerly))
+	}
 	fmt.Fprintf(out, "Every command now talks to %s until `flmnt logout`.\n", serverURL)
 	if origins := auth.OriginsOf(cleared); len(origins) > 0 {
 		fmt.Fprintf(out, "The hosted login was cleared (%s): one login at a time.\n", joinComma(origins))
@@ -55,12 +58,15 @@ func runLocalLogin(cmd *cobra.Command) error {
 }
 
 // recordedOrDerivedIdentity is the identity the machine already holds, or — on the first local login
-// — the one derived from its marker and the OS user and recorded. The file is the identity from
-// then on: a login never re-derives over it, so the sub a machine answers with never changes
-// underneath its records.
-func recordedOrDerivedIdentity() (identity.Identity, error) {
-	if id, err := identityLoad(); err == nil {
-		return id, nil
+// — a freshly SALTED one derived from its marker, the OS user and a random salt, and recorded
+// (QRM-ADR-016 §5g: unique by construction). The recorded identity is the identity from then on: a
+// login never re-derives over it, so the sub a machine answers with never changes underneath its
+// records. `--new` re-mints on purpose — a refused connection on a teammate's harness, a fresh start —
+// and the old sub is kept in the identity's history, never asked of anyone.
+func recordedOrDerivedIdentity(renew bool) (identity.Identity, error) {
+	held, err := identityLoad()
+	if err == nil && !renew {
+		return held, nil
 	}
 	marker, err := identityMarker()
 	if err != nil {
@@ -70,7 +76,12 @@ func recordedOrDerivedIdentity() (identity.Identity, error) {
 	if err != nil {
 		return identity.Identity{}, fmt.Errorf("local login refused: %w", err)
 	}
-	id := identity.Derive(marker, osUser)
+	var id identity.Identity
+	if renew && held.Sub != "" {
+		id = identity.Remint(held, marker, osUser, loginNow())
+	} else {
+		id = identity.DeriveSalted(marker, osUser, identity.NewSalt())
+	}
 	if err := identitySave(id); err != nil {
 		return identity.Identity{}, fmt.Errorf("recording the local login: %w", err)
 	}
