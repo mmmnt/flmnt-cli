@@ -37,14 +37,12 @@ type StreamBatch struct {
 }
 
 // ImportResult is the per-stream outcome reported by the target. The QRM-ADR-016 counts are present
-// only when their option was asked (reattributed on a push with attribution, reconciled / overwritten /
-// kept on a pull with a collision mode, replaced on a push with replacements).
+// only when their option was asked (overwritten / kept on a pull with a collision mode, replaced on a
+// push with replacements). Nothing is re-attributed: a record keeps its local author (SPEC-LINK-001).
 type ImportResult struct {
 	StreamSuffix string   `json:"streamSuffix"`
 	Appended     int      `json:"appended"`
 	Skipped      int      `json:"skipped"`
-	Reattributed *int     `json:"reattributed,omitempty"`
-	Reconciled   *int     `json:"reconciled,omitempty"`
 	Overwritten  *int     `json:"overwritten,omitempty"`
 	Kept         []string `json:"kept,omitempty"`
 	Replaced     *int     `json:"replaced,omitempty"`
@@ -70,9 +68,11 @@ type Resolution struct {
 type Resolver func(collisions []Collision) ([]Resolution, error)
 
 // Options is what QRM-ADR-016 adds to a sync. A push carries LocalSubs (the identity this machine
-// holds, re-attributed to the cloud account at the import) and replaces the records Marks hold for
-// the source; a pull with a Resolver runs in collision mode — REPORT first, the Resolver decides,
-// then RESOLVE — and records what was kept into Marks. Zero Options is the replication of before.
+// holds and the subs it replaced), which the import links to the cloud account in the join table
+// before the records land — nothing on a record is rewritten (SPEC-LINK-001) — and replaces the
+// records Marks hold for the source; a pull with a Resolver runs in collision mode — REPORT first,
+// the Resolver decides, then RESOLVE — and records what was kept into Marks. Zero Options is the
+// replication of before.
 type Options struct {
 	LocalSubs []string
 	Marks     *MarkStore
@@ -81,7 +81,7 @@ type Options struct {
 
 const exportQuery = `query($projectId: ID!, $cursors: [MemoryCursorInput!]){ memoryExport(projectId: $projectId, cursors: $cursors){ streams { streamSuffix revision events } } }`
 const importMutation = `mutation($projectId: ID!, $streams: [MemoryStreamImportInput!]!){ memoryImport(projectId: $projectId, streams: $streams){ imported { streamSuffix appended skipped } } }`
-const convergeMutation = `mutation($projectId: ID!, $streams: [MemoryStreamImportInput!]!, $attribution: MemoryImportAttribution, $onCollision: MemoryCollisionMode, $resolutions: [MemoryCollisionResolution!], $replace: [ID!]){ memoryImport(projectId: $projectId, streams: $streams, attribution: $attribution, onCollision: $onCollision, resolutions: $resolutions, replace: $replace){ imported { streamSuffix appended skipped reattributed reconciled overwritten kept replaced } collisions { streamSuffix correlationId existing incoming } } }`
+const convergeMutation = `mutation($projectId: ID!, $streams: [MemoryStreamImportInput!]!, $identity: MemoryImportIdentity, $onCollision: MemoryCollisionMode, $resolutions: [MemoryCollisionResolution!], $replace: [ID!]){ memoryImport(projectId: $projectId, streams: $streams, identity: $identity, onCollision: $onCollision, resolutions: $resolutions, replace: $replace){ imported { streamSuffix appended skipped overwritten kept replaced } collisions { streamSuffix correlationId existing incoming } } }`
 
 // cursorInputs turns the suffix->afterRevision cursor map into the [{streamSuffix, after}] GraphQL
 // input, key-sorted for deterministic requests.
@@ -157,7 +157,7 @@ func importBatch(ep Endpoint, suffix string, events []json.RawMessage, args impo
 	if args.converges() {
 		mutation = convergeMutation
 		if len(args.localSubs) > 0 {
-			variables["attribution"] = map[string]any{"localSubs": args.localSubs}
+			variables["identity"] = map[string]any{"localSubs": args.localSubs}
 		}
 		if args.onCollision != "" {
 			variables["onCollision"] = args.onCollision
@@ -324,12 +324,6 @@ func reportCollisions(to Endpoint, streams []StreamBatch) ([]Collision, error) {
 // importLine is one stream's outcome, with QRM-ADR-016's counts when the import carried them.
 func importLine(r ImportResult) string {
 	line := fmt.Sprintf("  %-32s appended %d, skipped %d", r.StreamSuffix, r.Appended, r.Skipped)
-	if r.Reattributed != nil {
-		line += fmt.Sprintf(", re-attributed %d", *r.Reattributed)
-	}
-	if r.Reconciled != nil {
-		line += fmt.Sprintf(", reconciled %d", *r.Reconciled)
-	}
 	if r.Overwritten != nil {
 		line += fmt.Sprintf(", overwritten %d", *r.Overwritten)
 	}

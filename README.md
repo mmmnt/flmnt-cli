@@ -95,6 +95,7 @@ flmnt login --local                           # once per machine and OS user —
 flmnt login --local --new                     # mint a new local identity (new salt, new sub); the old sub stays in the history
 flmnt local approve <code>                    # approve a client's pending sign-in (claude.ai, Claude Code) for the local login
 flmnt local claim <code> --server-url <url>   # from YOUR machine: claim a code shown by a teammate's flmnt for your identity, before they approve
+flmnt link                                    # link this machine's local identity to your hosted account (needs both logins); every push does it too
 flmnt whoami --json --client flmnt-cli        # the identity as one JSON object, with the client id derived for a tool
 flmnt logout --local                          # end a local session (the identity stays)
 ```
@@ -135,20 +136,23 @@ is asked; the broker's refusals (`LOCAL_APPROVAL_UNKNOWN`, `LOCAL_APPROVAL_EXPIR
 `LOCAL_APPROVAL_ALREADY_APPROVED`, `LOCAL_SUB_INVALID`, `LOCAL_CLIENT_INVALID`,
 `LOCAL_ADMIN_NOT_LOOPBACK`) are surfaced verbatim.
 
-**Converging on your cloud account (QRM-ADR-016).** `flmnt sync push` carries the local identity this
-machine holds as `attribution`: every record you wrote locally is written to the cloud workspace as
-the account you are logged in to (the sub from your hosted token; the tool's client id stays), while a
-teammate's `local_` records persist as written and you become their default notification target. The
-push needs both: the hosted login (`flmnt login`) and the identity (`flmnt login --local`, kept through
-logins and logouts); when a hosted login has swept the local token, it is minted again from the
-identity on the spot. `flmnt sync pull` writes the cloud copy exactly as it is; a record that exists in
-both places with different content or author is shown as a diff of the fields that differ and you
-answer `l` (keep yours) or `c` (take the cloud's) — or `--take local|cloud` for all, which a script
-needs, since no answer stops the pull before anything is written. The push's own echo (your record,
-now carrying your cloud sub) is reconciled silently. A record you keep is marked in
-`~/.filament/sync-marks.json` and your next push replaces its cloud copy (`replace`); the mark is then
-cleared. Counts are printed per stream: appended, skipped, re-attributed, reconciled, overwritten,
-kept, replaced.
+**Converging on your cloud account (QRM-ADR-016).** Nothing is ever rewritten on a record: what you
+wrote under your local identity keeps that author forever, in both stores. `flmnt sync push` carries
+the identity this machine holds (and the subs it replaced) as `identity`, and the hosted side LINKS
+them to the account you are logged in to in its join table before the records land, so wherever it has
+to act on a local author — a question, a notification, an erasure — it resolves the person at that
+moment. A teammate's `local_` records persist as written and you become their default target until
+they link. The push needs both: the hosted login (`flmnt login`) and the identity (`flmnt login --local`,
+kept through logins and logouts); when a hosted login has swept the local token, it is minted again
+from the identity on the spot. `flmnt link` writes the same rows and pushes nothing — for when you write
+to a teammate's local flmnt through a tunnel and someone else pushes the workspace. One hosted account
+per identity, ever: a sub another account holds is refused (`LINK_SUB_TAKEN`). `flmnt sync pull`
+writes the cloud copy exactly as it is; a record that exists in both places with different content or
+author is shown as a diff of the fields that differ and you answer `l` (keep yours) or `c` (take the
+cloud's) — or `--take local|cloud` for all, which a script needs, since no answer stops the pull before
+anything is written. A record you keep is marked in `~/.filament/sync-marks.json` and your next push
+replaces its cloud copy (`replace`, admitted for records of your own identities); the mark is then
+cleared. Counts are printed per stream: appended, skipped, overwritten, kept, replaced.
 
 **Connecting to a teammate's harness.** When the approval page belongs to someone else's flmnt (behind
 their tunnel), the host's `approve` would otherwise sign you in as the HOST. Before they approve, run
@@ -232,7 +236,8 @@ flmnt proxy                      # run the local MCP proxy (injects Authorizatio
 flmnt mcp auth-header            # print MCP auth headers as JSON for the .mcp.json headersHelper
 
 # Data
-flmnt sync push                  # sync local data up to the remote workspace AS your cloud account (your local identity is re-attributed)
+flmnt sync push                  # sync local data up to the remote workspace as your cloud account; your local identity is linked to it, records keep their author
+flmnt link                       # link this machine's local identity (and its history) to the hosted account you are logged into, pushing nothing
 flmnt sync pull [--take local|cloud]   # sync remote data down to local; each record that differs in both places is a diff you decide
                                  # the local side authenticates from the token `flmnt login --local` stores, minted again from your identity when a hosted login swept it
 

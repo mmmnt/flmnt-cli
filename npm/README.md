@@ -91,7 +91,8 @@ flmnt proxy                      # run the local MCP proxy (injects Authorizatio
 flmnt mcp auth-header            # print MCP auth headers as JSON for .mcp.json
 
 # Data
-flmnt sync push                  # sync local data up to the remote workspace AS your cloud account (your local identity is re-attributed)
+flmnt sync push                  # sync local data up to the remote workspace as your cloud account; your local identity is linked to it, records keep their author
+flmnt link                       # link this machine's local identity (and its history) to the hosted account you are logged into, pushing nothing
 flmnt sync pull [--take local|cloud]   # sync remote data down to local; each record that differs in both places is a diff you decide
 
 # Memory (continuity loop + deterministic writes for hooks / CI)

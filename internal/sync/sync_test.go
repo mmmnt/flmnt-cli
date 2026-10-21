@@ -272,15 +272,10 @@ func newConvergeRouter(t *testing.T, exportBody string, collisions []map[string]
 		switch mode {
 		case "REPORT":
 			result["appended"] = 0
-			result["reconciled"] = 0
 			collisions = f.collisions
 		case "RESOLVE":
-			result["reconciled"] = 1
 			result["overwritten"] = len(f.collisions) - len(f.keptOnWrite)
 			result["kept"] = f.keptOnWrite
-		}
-		if _, ok := req.Variables["attribution"]; ok {
-			result["reattributed"] = 1
 		}
 		if rep, ok := req.Variables["replace"].([]any); ok {
 			result["replaced"] = len(rep)
@@ -309,12 +304,13 @@ func tmpMarks(t *testing.T) *MarkStore {
 }
 
 /*
-A push carries the identity this machine holds as `attribution.localSubs` (QRM-ADR-016 §1) and, as
+A push carries the identity this machine holds as `identity.localSubs` (QRM-ADR-016 §1, SPEC-LINK-001:
+linked to the cloud account, never rewritten onto a record) and, as
 
 	`replace`, the records the person kept as local truth on an earlier pull (ruling 7); a replaced
 	mark is cleared. Without either, the plain mutation of before is sent.
 */
-func TestRunWithPushCarriesAttributionAndReplacesKeptMarks(t *testing.T) {
+func TestRunWithPushCarriesIdentityAndReplacesKeptMarks(t *testing.T) {
 	src := newFakeRouter(t, exportData(oneDomainStream))
 	dst := newConvergeRouter(t, "", nil, nil)
 	marks := tmpMarks(t)
@@ -329,8 +325,8 @@ func TestRunWithPushCarriesAttributionAndReplacesKeptMarks(t *testing.T) {
 		t.Fatalf("one import call, got %d", len(dst.calls))
 	}
 	vars := dst.calls[0]
-	if attr, _ := vars["attribution"].(map[string]any); attr == nil || attr["localSubs"].([]any)[0] != "local_34f6" {
-		t.Fatalf("attribution not sent: %v", vars)
+	if id, _ := vars["identity"].(map[string]any); id == nil || id["localSubs"].([]any)[0] != "local_34f6" {
+		t.Fatalf("identity not sent: %v", vars)
 	}
 	if rep, _ := vars["replace"].([]any); len(rep) != 1 || rep[0] != "d1" {
 		t.Fatalf("replace not sent: %v", vars)
@@ -341,8 +337,8 @@ func TestRunWithPushCarriesAttributionAndReplacesKeptMarks(t *testing.T) {
 	if got := marks.For(cursorKey(src.srv.URL, "quorum"), "domain"); len(got) != 0 {
 		t.Fatalf("a replaced mark is cleared, got %v", got)
 	}
-	if !strings.Contains(out.String(), "re-attributed 1") || !strings.Contains(out.String(), "replaced 1") {
-		t.Fatalf("the line carries the counts: %q", out.String())
+	if strings.Contains(out.String(), "re-attributed") || !strings.Contains(out.String(), "replaced 1") {
+		t.Fatalf("the line carries the replace count and no re-attribution: %q", out.String())
 	}
 }
 
@@ -384,7 +380,7 @@ func TestRunWithPullReportsResolvesAndMarksWhatWasKept(t *testing.T) {
 	if got := marks.For(cursorKey(dst.srv.URL, "quorum"), "domain"); len(got) != 1 || got[0] != "d2" {
 		t.Fatalf("what the server kept is marked for the next push, got %v", got)
 	}
-	for _, want := range []string{"2 record(s) exist in both places", "reconciled 1", "overwritten 1", "kept 1"} {
+	for _, want := range []string{"2 record(s) exist in both places", "overwritten 1", "kept 1"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("want %q in %q", want, out.String())
 		}

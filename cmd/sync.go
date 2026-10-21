@@ -93,8 +93,8 @@ func runSync(cmd *cobra.Command, push bool) error {
 	out := cmd.OutOrStdout()
 	if push {
 		if id, err := identityLoad(); err == nil {
-			opts.LocalSubs = []string{id.Sub}
-			fmt.Fprintf(out, "Pushing as %s (%s) — records written locally as %s become the cloud account's.\n", identityOf(hosted), hosted.Sub, id.Sub)
+			opts.LocalSubs = append([]string{id.Sub}, id.Formerly()...)
+			fmt.Fprintf(out, "Pushing as %s (%s); your local identity %s is linked to it — records keep their local author.\n", identityOf(hosted), hosted.Sub, id.Sub)
 		}
 	} else {
 		take, _ := cmd.Flags().GetString("take")
