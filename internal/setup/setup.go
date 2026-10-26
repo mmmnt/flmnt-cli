@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
@@ -129,7 +130,37 @@ func writeProjectConfig(dir string, cfg Config) error {
 		pc.ComposeFiles = existing.ComposeFiles
 		pc.EnvFile = existing.EnvFile
 	}
-	return writeJSON(filepath.Join(dir, ProjectConfigFile), pc)
+	return writeJSON(filepath.Join(dir, ProjectConfigFile), mergeUnowned(dir, pc))
+}
+
+// mergeUnowned is pc with every key of the checkout's existing configuration that ProjectConfig does not own carried
+// over as it was, so an entry another tool keeps in .flmnt.json survives a rewrite.
+func mergeUnowned(dir string, pc ProjectConfig) map[string]json.RawMessage {
+	out := map[string]json.RawMessage{}
+	for _, name := range []string{LegacyProjectConfigFile, ProjectConfigFile} {
+		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+			_ = json.Unmarshal(b, &out)
+		}
+	}
+	owned, _ := json.Marshal(pc)
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(owned, &fields)
+	for _, k := range ownedKeys() {
+		delete(out, k)
+	}
+	for k, v := range fields {
+		out[k] = v
+	}
+	return out
+}
+
+func ownedKeys() []string {
+	t := reflect.TypeOf(ProjectConfig{})
+	keys := make([]string, 0, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		keys = append(keys, strings.Split(t.Field(i).Tag.Get("json"), ",")[0])
+	}
+	return keys
 }
 
 // UsesLegacyProjectConfig reports a checkout whose configuration still carries the former name alone.

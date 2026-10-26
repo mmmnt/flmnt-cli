@@ -463,3 +463,27 @@ func TestRunPreservesTheHarnessDeclarations(t *testing.T) {
 		t.Fatalf("got %+v err %v", pc, err)
 	}
 }
+
+func TestRunKeepsKeysItDoesNotOwn(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"server_url":"http://localhost:8000/mcp","project_id":"p","tool":{"store":".tool","port":1}}`
+	if err := os.WriteFile(filepath.Join(dir, ".flmnt.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p2", Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	var got struct {
+		ProjectID string         `json:"project_id"`
+		Tool      map[string]any `json:"tool"`
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".flmnt.json"))
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ProjectID != "p2" || got.Tool["store"] != ".tool" || got.Tool["port"] != float64(1) {
+		t.Fatalf(".flmnt.json = %s", b)
+	}
+}
