@@ -186,6 +186,26 @@ still win), and `flmnt setup` preserves the field. `flmnt setup` always rewrites
 `.mcp.json` to what it is asked for (other servers stay as they are); `pnpm env:local` in the checkout
 restores the local entry.
 
+### Running the local node
+
+`flmnt local up` runs one node per machine, and that node holds every workspace. The stack is flmnt's
+baseline harness (`~/.flmnt/harness/compose.yaml`, when present) with the checkout's own compose files
+stacked on it in order (docker compose `-f`, the baseline first). Every store keeps its data on the host
+under the node's volumes path, which the CLI passes to compose as `FLMNT_VOLUMES`. A checkout declares
+all of this in `.flmnt.json`:
+
+```json
+{
+  "project_id": "<workspace id>",
+  "volumes_path": "~/.flmnt/volumes",
+  "compose_files": ["docker/docker-compose.local.yml"],
+  "env_file": ".env.local"
+}
+```
+
+`volumes_path` defaults to `~/.flmnt/volumes`. The CLI keeps everything else it holds for a person under
+`~/.flmnt` too, and moves in whatever an older build left in `~/.filament`.
+
 ### Which workspace a command uses
 
 `brief`, `derive`, `gate` and `record-*` resolve the project in this order, first match wins:
@@ -215,6 +235,10 @@ flmnt whoami                     # show your identity (from the login; no --serv
 flmnt whoami --json [--client <tool>]   # the identity as one JSON object (exit 1 when not logged in)
 
 # Local harness
+flmnt local up                   # start the local node: the baseline harness + the checkout's compose_files, stores under volumes_path
+flmnt local down                 # stop it; every store's data stays under the volumes path
+flmnt local status               # list its services
+flmnt local compose <args...>    # any other docker compose call on the same stack (a seed job, a restart, logs)
 flmnt local approve <code> [--yes] [--admin-url <url>]   # approve a client's pending sign-in on the local broker for the local login
 flmnt local claim <code> --server-url <url> [--yes]      # claim a teammate's pending code for this machine's identity, before they approve
 
