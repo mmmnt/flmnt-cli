@@ -446,3 +446,20 @@ func TestLegacyProjectConfigIsReportedOnlyWhenTheCheckoutHoldsTheFormerNameAlone
 		t.Fatal("want true only for a checkout holding .quorum.json alone")
 	}
 }
+
+func TestRunPreservesTheHarnessDeclarations(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"server_url":"http://localhost:8000/mcp","project_id":"p","compose_files":["docker/a.yml","docker/b.yml"],"env_file":".env.local"}`
+	if err := os.WriteFile(filepath.Join(dir, ".flmnt.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil || strings.Join(pc.ComposeFiles, ",") != "docker/a.yml,docker/b.yml" || pc.EnvFile != ".env.local" {
+		t.Fatalf("got %+v err %v", pc, err)
+	}
+}

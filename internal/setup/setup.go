@@ -126,6 +126,8 @@ func writeProjectConfig(dir string, cfg Config) error {
 	if existing, err := LoadProjectConfig(dir); err == nil {
 		pc.LocalGraphQLEndpoint = existing.LocalGraphQLEndpoint
 		pc.VolumesPath = existing.VolumesPath
+		pc.ComposeFiles = existing.ComposeFiles
+		pc.EnvFile = existing.EnvFile
 	}
 	return writeJSON(filepath.Join(dir, ProjectConfigFile), pc)
 }
