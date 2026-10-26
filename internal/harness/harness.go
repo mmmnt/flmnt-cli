@@ -3,6 +3,7 @@
 package harness
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,9 @@ func ComposeArgs(projectDir string, pc *setup.ProjectConfig, args []string) ([]s
 	}
 	for _, f := range pc.ComposeFiles {
 		out = append(out, "-f", inProject(projectDir, f))
+	}
+	if len(out) == 1 {
+		return nil, fmt.Errorf("no harness to run: no baseline at %s and no compose_files in %s", baseline, setup.ProjectConfigFile)
 	}
 	if pc.EnvFile != "" {
 		out = append(out, "--env-file", inProject(projectDir, pc.EnvFile))

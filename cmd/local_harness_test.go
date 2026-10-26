@@ -48,3 +48,32 @@ func TestLocalUpStartsTheStackWithTheVolumesPath(t *testing.T) {
 		t.Fatalf("docker got\n %q\nwant\n %q", out, want)
 	}
 }
+
+func TestLocalDownStopsTheStackAndLeavesTheVolumes(t *testing.T) {
+	out, home, err := runLocalHarness(t, `{"compose_files":["compose.yml"]}`, "down")
+	if err != nil || out != filepath.Join(home, ".flmnt", "volumes")+"|compose -f <project>/compose.yml down --remove-orphans\n" {
+		t.Fatalf("local down: %q (%v)", out, err)
+	}
+}
+
+func TestLocalStatusListsTheStacksServices(t *testing.T) {
+	out, home, err := runLocalHarness(t, `{"compose_files":["compose.yml"]}`, "status")
+	if err != nil || out != filepath.Join(home, ".flmnt", "volumes")+"|compose -f <project>/compose.yml ps\n" {
+		t.Fatalf("local status: %q (%v)", out, err)
+	}
+}
+
+func TestLocalComposePassesAnyComposeCallThroughOnTheSameStack(t *testing.T) {
+	out, home, err := runLocalHarness(t, `{"compose_files":["compose.yml"],"volumes_path":"/data/flmnt"}`, "compose", "--profile", "tools", "run", "--rm", "seed")
+	_ = home
+	if err != nil || out != "/data/flmnt|compose -f <project>/compose.yml --profile tools run --rm seed\n" {
+		t.Fatalf("local compose: %q (%v)", out, err)
+	}
+}
+
+func TestLocalUpRefusesWhenThereIsNoHarnessToRun(t *testing.T) {
+	out, _, err := runLocalHarness(t, `{}`, "up")
+	if err == nil || out != "" || !strings.Contains(err.Error(), "compose_files") {
+		t.Fatalf("local up with no harness: %q (%v)", out, err)
+	}
+}

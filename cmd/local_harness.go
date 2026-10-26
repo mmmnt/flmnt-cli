@@ -48,6 +48,31 @@ var localUpCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, _ []string) error { return runCompose(cmd, []string{"up", "-d"}) },
 }
 
+var localDownCmd = &cobra.Command{
+	Use:   "down",
+	Short: "Stop the local flmnt node",
+	Long:  "Stops the local node. Every store's data stays under the node's volumes path; deleting it is\nthe person's act, outside flmnt.",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		return runCompose(cmd, []string{"down", "--remove-orphans"})
+	},
+}
+
+var localStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "List the local node's services",
+	Args:  cobra.NoArgs,
+	RunE:  func(cmd *cobra.Command, _ []string) error { return runCompose(cmd, []string{"ps"}) },
+}
+
+var localComposeCmd = &cobra.Command{
+	Use:                "compose [args...]",
+	Short:              "Run any docker compose call on the local node's stack",
+	Long:               "Runs `docker compose <args>` on the same stack `flmnt local up` starts, with the same volumes path:\nfor a seed job, a restart, a log tail.",
+	DisableFlagParsing: true,
+	RunE:               func(cmd *cobra.Command, args []string) error { return runCompose(cmd, args) },
+}
+
 func init() {
-	localCmd.AddCommand(localUpCmd)
+	localCmd.AddCommand(localUpCmd, localDownCmd, localStatusCmd, localComposeCmd)
 }
