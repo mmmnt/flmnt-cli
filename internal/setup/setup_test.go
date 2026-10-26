@@ -341,7 +341,7 @@ func TestRunRewritesALoopbackFlmntEntryThatCarriesAHeadersHelper(t *testing.T) {
 }
 
 /*
-The harness publishes its router on the host and the checkout DECLARES where, in .quorum.json. setup
+The harness publishes its router on the host and the checkout DECLARES where, in .flmnt.json. setup
 
 	rewrites that file on every run, so a declaration it does not know would be dropped the next time
 	anyone re-ran setup; the field is read back and written out.
@@ -395,5 +395,21 @@ func TestLoadProjectConfigReadsFlmntJSON(t *testing.T) {
 	}
 	if pc.ProjectID != "p-flmnt" {
 		t.Fatalf("project_id = %q, want p-flmnt", pc.ProjectID)
+	}
+}
+
+func TestRunWritesFlmntJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p-written", Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	var pc ProjectConfig
+	b, err := os.ReadFile(filepath.Join(dir, ".flmnt.json"))
+	if err != nil {
+		t.Fatalf("read .flmnt.json: %v", err)
+	}
+	if err := json.Unmarshal(b, &pc); err != nil || pc.ProjectID != "p-written" {
+		t.Fatalf(".flmnt.json = %s (%v), want project_id p-written", b, err)
 	}
 }

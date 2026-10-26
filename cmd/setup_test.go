@@ -67,7 +67,7 @@ func TestSetupWritesHookToSettingsLocalJSON(t *testing.T) {
 	}
 }
 
-func TestSetupWritesQuorumJSON(t *testing.T) {
+func TestSetupWritesFlmntJSON(t *testing.T) {
 	dir := t.TempDir()
 	cfg := setup.Config{
 		ServerURL: "https://quorum.example.com",
@@ -80,12 +80,12 @@ func TestSetupWritesQuorumJSON(t *testing.T) {
 		t.Fatalf("setup.Run: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, ".quorum.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".flmnt.json"))
 	if err != nil {
-		t.Fatalf("expected .quorum.json to exist: %v", err)
+		t.Fatalf("expected .flmnt.json to exist: %v", err)
 	}
 	if !contains(string(data), "https://quorum.example.com") {
-		t.Error("expected server URL in .quorum.json")
+		t.Error("expected server URL in .flmnt.json")
 	}
 }
 

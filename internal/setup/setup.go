@@ -97,7 +97,7 @@ func Run(cfg Config) error {
 	}
 
 	if err := writeProjectConfig(dir, cfg); err != nil {
-		return fmt.Errorf("writing .quorum.json: %w", err)
+		return fmt.Errorf("writing %s: %w", ProjectConfigFile, err)
 	}
 	if err := writeMCPJSON(dir, cfg); err != nil {
 		return fmt.Errorf("writing .mcp.json: %w", err)
@@ -119,7 +119,7 @@ func writeProjectConfig(dir string, cfg Config) error {
 	if existing, err := LoadProjectConfig(dir); err == nil {
 		pc.LocalGraphQLEndpoint = existing.LocalGraphQLEndpoint
 	}
-	return writeJSON(filepath.Join(dir, ".quorum.json"), pc)
+	return writeJSON(filepath.Join(dir, ProjectConfigFile), pc)
 }
 
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {
