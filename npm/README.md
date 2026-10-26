@@ -21,6 +21,11 @@ scoop install flmnt
 go install github.com/mmmnt/flmnt-cli@latest # Go
 ```
 
+
+## Running the local node
+
+`flmnt local up | down | status | compose <args>` run one node per machine, and it holds every workspace. The stack is flmnt's baseline harness (`~/.flmnt/harness/compose.yaml`, when present) with the checkout's `compose_files` from `.flmnt.json` stacked on it in order. Every store keeps its data under `volumes_path` (default `~/.flmnt/volumes`), passed to compose as `FLMNT_VOLUMES`. The CLI keeps everything it holds for a person under `~/.flmnt`, and moves in whatever an older build left in `~/.filament`. A checkout still holding only the former `.quorum.json` is read from it, and `flmnt whoami` says to rename it.
+
 ## Quickstart
 
 Authenticate, pick a workspace, and wire Claude Code to your flmnt MCP:
@@ -36,7 +41,7 @@ flmnt setup --server-url <flmnt-url> --project <name>   # wire this repo to a wo
 
 ### Local flmnt (the compose harness)
 
-A checkout can run against a local flmnt instead of the hosted one. The CLI tells the two apart by the server URL it resolves (`--server-url` / `QUORUM_SERVER_URL` / `.quorum.json` / the login config): a loopback host such as `http://localhost:8000/mcp` is local, anything else is hosted. The hosted path is unchanged — credentials come from the keychain `flmnt login` filled.
+A checkout can run against a local flmnt instead of the hosted one. The CLI tells the two apart by the server URL it resolves (`--server-url` / `QUORUM_SERVER_URL` / `.flmnt.json` / the login config): a loopback host such as `http://localhost:8000/mcp` is local, anything else is hosted. The hosted path is unchanged — credentials come from the keychain `flmnt login` filled.
 
 A local flmnt mints credentials for a declared person, never for a default, and asks for nothing:
 
@@ -46,16 +51,16 @@ flmnt whoami --json --client flmnt-cli   # {"sub","workspace","client_id"} — t
 flmnt logout --local                     # end a local session (the identity stays)
 ```
 
-`login --local` derives the identity from a marker the machine already carries (macOS `IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user: `sub = "local_" + UUIDv5(marker + OS user)`, and per tool `client_id = "local_" + UUIDv5(sub, tool)`. Only the digest is kept (`~/.filament/local-identity.json`); the same machine and user give the same sub forever, and two people or two machines never collide. No login, on either side, prints nothing on stdout, one reason on stderr, and exits 1.
+`login --local` derives the identity from a marker the machine already carries (macOS `IOPlatformUUID`, Linux `/etc/machine-id`, Windows `MachineGuid`) and the OS user: `sub = "local_" + UUIDv5(marker + OS user)`, and per tool `client_id = "local_" + UUIDv5(sub, tool)`. Only the digest is kept (`~/.flmnt/local-identity.json`); the same machine and user give the same sub forever, and two people or two machines never collide. No login, on either side, prints nothing on stdout, one reason on stderr, and exits 1.
 
-Every command — `brief`, `gate`, `derive`, `record-*`, `workspace`, `sync`'s local side — authenticates from the keychain token stored under the server URL it resolves: `flmnt login` stores it for a hosted flmnt, `flmnt login --local` for the harness (the device grant as `flmnt-cli`, approved by the CLI itself over the broker's loopback admin listener). A server with no stored token is refused as ``not logged in to <server>: run `flmnt login --local --server-url <server>` `` (or `flmnt login` for a hosted one); nothing is substituted. The `.mcp.json` entry `flmnt setup` writes is url-only in both environments. The GraphQL endpoint of a local server comes from `local_graphql_endpoint` in the checkout's `.quorum.json` (`FILAMENT_GRAPHQL_ENDPOINT` overrides it); `flmnt setup` carries that field through. `flmnt health` names the environment it resolved, probes that server's `/health`, reports the local token on a loopback server, and probes Core/Engine/proxy only when `CORE_URL` / `ENGINE_URL` / `QUORUM_PROXY_PORT` are set.
+Every command — `brief`, `gate`, `derive`, `record-*`, `workspace`, `sync`'s local side — authenticates from the keychain token stored under the server URL it resolves: `flmnt login` stores it for a hosted flmnt, `flmnt login --local` for the harness (the device grant as `flmnt-cli`, approved by the CLI itself over the broker's loopback admin listener). A server with no stored token is refused as ``not logged in to <server>: run `flmnt login --local --server-url <server>` `` (or `flmnt login` for a hosted one); nothing is substituted. The `.mcp.json` entry `flmnt setup` writes is url-only in both environments. The GraphQL endpoint of a local server comes from `local_graphql_endpoint` in the checkout's `.flmnt.json` (`FILAMENT_GRAPHQL_ENDPOINT` overrides it); `flmnt setup` carries that field through. `flmnt health` names the environment it resolved, probes that server's `/health`, reports the local token on a loopback server, and probes Core/Engine/proxy only when `CORE_URL` / `ENGINE_URL` / `QUORUM_PROXY_PORT` are set.
 
 ### Which workspace a command uses
 
 `brief`, `derive`, `gate` and `record-*` resolve the project in this order, first match wins:
 
 1. an explicit `--project <name|id>` on the command
-2. `project_id` in the repo's `.quorum.json` — written by `flmnt setup --project`
+2. `project_id` in the repo's `.flmnt.json` — written by `flmnt setup --project`
 3. the active workspace (`flmnt workspace use`)
 
 Step 3 is a fallback of last resort, not the norm: a repo that reaches it has no identity of its own, so a per-machine setting decides where its memory goes. `flmnt workspace use` remains a convenience for ad-hoc commands and does not decide where a configured repo records.
