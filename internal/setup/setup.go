@@ -2,7 +2,9 @@ package setup
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +24,13 @@ type Config struct {
 	Dir           string // project root; defaults to cwd
 	Proxy         bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
 }
+
+// ProjectConfigFile is the checkout's flmnt configuration. LegacyProjectConfigFile is the name it had
+// before the product was flmnt; a checkout that still holds only that file keeps working.
+const (
+	ProjectConfigFile       = ".flmnt.json"
+	LegacyProjectConfigFile = ".quorum.json"
+)
 
 type ProjectConfig struct {
 	ServerURL string `json:"server_url"`
@@ -121,7 +130,10 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 			return nil, err
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(dir, ".quorum.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ProjectConfigFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		data, err = os.ReadFile(filepath.Join(dir, LegacyProjectConfigFile))
+	}
 	if err != nil {
 		return nil, err
 	}

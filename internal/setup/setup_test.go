@@ -382,3 +382,18 @@ func TestRunWritesAURLOnlyFlmntEntryForLocalAndHostedServers(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadProjectConfigReadsFlmntJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".flmnt.json"), []byte(`{"server_url":"http://localhost:8000/mcp","project_id":"p-flmnt"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig: %v", err)
+	}
+	if pc.ProjectID != "p-flmnt" {
+		t.Fatalf("project_id = %q, want p-flmnt", pc.ProjectID)
+	}
+}
