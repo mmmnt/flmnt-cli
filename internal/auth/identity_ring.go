@@ -8,7 +8,7 @@ import (
 
 // identityService is the keychain service the machine's LOCAL IDENTITY lives under (QRM-ADR-016
 // §5f–§5g). It is deliberately not the tokens' service: DeleteAllTokens enumerates and removes every
-// item under keychainService and removes ~/.filament/keyring whole, and the identity must survive
+// item under keychainService and removes ~/.flmnt/keyring whole, and the identity must survive
 // every logout and every login of the other kind. On the file backend it lives in its own directory
 // for the same reason.
 const identityService = "flmnt-identity"

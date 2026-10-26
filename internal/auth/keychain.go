@@ -214,7 +214,7 @@ func describeStorage(backend keyring.BackendType, fileDir string) string {
 		if fileDir != "" {
 			return "an encrypted file in " + fileDir
 		}
-		return "an encrypted file under ~/.filament/keyring"
+		return "an encrypted file under ~/.flmnt/keyring"
 	}
 	return "the OS keychain"
 }

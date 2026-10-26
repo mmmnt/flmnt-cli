@@ -3,6 +3,7 @@ package sync
 import (
 	"encoding/json"
 	"errors"
+	"github.com/mmmnt/flmnt-cli/internal/home"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,13 +22,13 @@ func cursorKey(ref, workspace string) string {
 	return ref + "|" + workspace
 }
 
-// DefaultCursorPath is ~/.filament/sync-cursors.json.
+// DefaultCursorPath is ~/.flmnt/sync-cursors.json.
 func DefaultCursorPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := home.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".filament", "sync-cursors.json"), nil
+	return filepath.Join(dir, "sync-cursors.json"), nil
 }
 
 // LoadCursors reads the cursor file at path (an absent file is an empty store).

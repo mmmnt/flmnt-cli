@@ -110,7 +110,7 @@ carries a random salt in the derivation (`marker + "\n" + osUser + "\n" + salt`)
 ever collide — not two people on cloned machine ids, not two logins of one person (QRM-ADR-016 §5g);
 identities recorded before the salt keep their sub. Only the digest is kept, in the OS keychain under
 its own service `flmnt-identity` (never the tokens' `quorum-cli`, which a logout sweeps), with
-`~/.filament/local-identity.json` (0600) as a cache of it holding `{sub, created_at, salt?, history?}`,
+`~/.flmnt/local-identity.json` (0600) as a cache of it holding `{sub, created_at, salt?, history?}`,
 never the marker. `flmnt login --local --new` mints a new identity on purpose — after a refused
 connection on a teammate's harness, or for a fresh start — and keeps the old sub in the identity's
 history, which `whoami` shows (`formerly local_…`) and which the link request will carry, so nobody
@@ -150,7 +150,7 @@ per identity, ever: a sub another account holds is refused (`LINK_SUB_TAKEN`). `
 writes the cloud copy exactly as it is; a record that exists in both places with different content or
 author is shown as a diff of the fields that differ and you answer `l` (keep yours) or `c` (take the
 cloud's) — or `--take local|cloud` for all, which a script needs, since no answer stops the pull before
-anything is written. A record you keep is marked in `~/.filament/sync-marks.json` and your next push
+anything is written. A record you keep is marked in `~/.flmnt/sync-marks.json` and your next push
 replaces its cloud copy (`replace`, admitted for records of your own identities); the mark is then
 cleared. Counts are printed per stream: appended, skipped, overwritten, kept, replaced.
 

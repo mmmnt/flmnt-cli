@@ -2,6 +2,7 @@ package derive
 
 import (
 	"encoding/json"
+	"github.com/mmmnt/flmnt-cli/internal/home"
 	"os"
 	"path/filepath"
 )
@@ -16,11 +17,10 @@ type Cursor struct {
 }
 
 func cursorPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := home.Dir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".filament")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

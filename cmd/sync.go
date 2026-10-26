@@ -301,8 +301,8 @@ func init() {
 		c.Flags().String("remote-workspace", "", "Remote workspace id (default: active workspace)")
 		c.Flags().String("local-url", defaultLocalURL, "Local MCP server URL")
 		c.Flags().String("local-workspace", defaultLocalWorkspace, "Local workspace id")
-		c.Flags().String("cursor-file", "", "Path to the sync cursor file (default: ~/.filament/sync-cursors.json)")
-		c.Flags().String("marks-file", "", "Path to the file of records kept as local truth (default: ~/.filament/sync-marks.json)")
+		c.Flags().String("cursor-file", "", "Path to the sync cursor file (default: ~/.flmnt/sync-cursors.json)")
+		c.Flags().String("marks-file", "", "Path to the file of records kept as local truth (default: ~/.flmnt/sync-marks.json)")
 		c.Flags().String("admin-url", localadmin.DefaultBaseURL, "the local broker's admin listener, for minting the local token when the keychain holds none")
 	}
 	syncPullCmd.Flags().String("take", "", "decide every collision the same way: local keeps your copy, cloud takes the cloud copy")

@@ -18,7 +18,7 @@ legacy single blob — all of it goes, and the encrypted file keyring of an olde
 func TestDeleteAllTokensClearsEveryServerAndTheFileKeyring(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	legacyDir := filepath.Join(home, ".filament", "keyring")
+	legacyDir := filepath.Join(home, ".flmnt", "keyring")
 	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestDeleteAllTokensClearsEveryServerAndTheFileKeyring(t *testing.T) {
 		t.Errorf("nothing may remain; got %v", left)
 	}
 	if _, err := os.Stat(legacyDir); !os.IsNotExist(err) {
-		t.Error("the legacy file keyring under ~/.filament must be removed whole")
+		t.Error("the legacy file keyring under ~/.flmnt must be removed whole")
 	}
 	if _, err := LoadToken("https://mcp.production.flmnt.ai"); err != ErrNotFound {
 		t.Errorf("after DeleteAllTokens, LoadToken = %v, want ErrNotFound", err)
@@ -58,14 +58,14 @@ func TestDeleteAllTokensClearsEveryServerAndTheFileKeyring(t *testing.T) {
 }
 
 /*
-The sweep is total for CREDENTIALS and touches nothing else under ~/.filament: the local identity
+The sweep is total for CREDENTIALS and touches nothing else under ~/.flmnt: the local identity
 file beside the config survives every logout (founder ruling 2026-10-20 — identity and session are
 separate; a keychain-resident identity will likewise live under its own service, never this one).
 */
 func TestDeleteAllTokensLeavesTheLocalIdentityBesideTheConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	identityPath := filepath.Join(home, ".filament", "local-identity.json")
+	identityPath := filepath.Join(home, ".flmnt", "local-identity.json")
 	if err := os.MkdirAll(filepath.Dir(identityPath), 0o700); err != nil {
 		t.Fatal(err)
 	}

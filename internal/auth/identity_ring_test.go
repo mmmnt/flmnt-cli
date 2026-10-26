@@ -25,7 +25,7 @@ func TestDeleteAllTokensLeavesTheIdentityRingAlone(t *testing.T) {
 	if err := tokens.Set(keyring.Item{Key: "https://mcp.production.flmnt.ai|access_token", Data: []byte("t")}); err != nil {
 		t.Fatal(err)
 	}
-	identityDir := filepath.Join(home, ".filament", "identity")
+	identityDir := filepath.Join(home, ".flmnt", "identity")
 	ring, err := keyring.Open(keyring.Config{ServiceName: identityService, AllowedBackends: []keyring.BackendType{keyring.FileBackend}, FileDir: identityDir, FilePasswordFunc: func(string) (string, error) { return identityService, nil }})
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestIdentityKeychainConfigIsItsOwnServiceAndDirectory(t *testing.T) {
 	if cfg.ServiceName != "flmnt-identity" || cfg.ServiceName == keychainService {
 		t.Fatalf("service %q", cfg.ServiceName)
 	}
-	if cfg.FileDir != "/home/u/.filament/identity" || cfg.FileDir == keychainConfig().FileDir {
+	if cfg.FileDir != "/home/u/.flmnt/identity" || cfg.FileDir == keychainConfig().FileDir {
 		t.Fatalf("file dir %q", cfg.FileDir)
 	}
 	if len(cfg.AllowedBackends) != len(keychainConfig().AllowedBackends) {

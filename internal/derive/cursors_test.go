@@ -35,3 +35,13 @@ func TestCursorDoneAfterMark(t *testing.T) {
 		t.Errorf("Save: %v", err)
 	}
 }
+
+func TestCursorPathLivesUnderDotFlmnt(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	p, err := cursorPath()
+	if err != nil || p != filepath.Join(tmp, ".flmnt", "derive-cursor.json") {
+		t.Fatalf("cursorPath = %q (%v)", p, err)
+	}
+}

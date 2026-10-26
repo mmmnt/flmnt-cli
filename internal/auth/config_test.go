@@ -63,7 +63,7 @@ func TestSaveConfigCreatesDirectoryWith0700Perms(t *testing.T) {
 	if err := SaveConfig(CLIConfig{ActiveWorkspaceID: "uuid-1"}); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
-	info, err := os.Stat(filepath.Join(tmp, ".filament"))
+	info, err := os.Stat(filepath.Join(tmp, ".flmnt"))
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}

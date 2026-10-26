@@ -121,7 +121,7 @@ func Path() (string, error) {
 }
 
 // The identity lives in the OS keychain under its own service (auth.OpenIdentityRing) — the one
-// copy that survives `rm -rf ~/.filament`, a logout and a hosted login — and the json file beside the
+// copy that survives `rm -rf ~/.flmnt`, a logout and a hosted login — and the json file beside the
 // config is a cache of it, which is what made the login explicit before the keychain held it.
 const ringKey = "identity"
 

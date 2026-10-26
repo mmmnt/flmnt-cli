@@ -3,6 +3,7 @@ package sync
 import (
 	"encoding/json"
 	"errors"
+	"github.com/mmmnt/flmnt-cli/internal/home"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,13 +19,13 @@ type MarkStore struct {
 	marks map[string]map[string][]string
 }
 
-// DefaultMarkPath is ~/.filament/sync-marks.json.
+// DefaultMarkPath is ~/.flmnt/sync-marks.json.
 func DefaultMarkPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := home.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".filament", "sync-marks.json"), nil
+	return filepath.Join(dir, "sync-marks.json"), nil
 }
 
 // LoadMarks reads the mark file at path (an absent file is an empty store).

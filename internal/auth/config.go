@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"github.com/mmmnt/flmnt-cli/internal/home"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,11 +39,7 @@ type CLIConfig struct {
 }
 
 func ConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".filament"), nil
+	return home.Dir()
 }
 
 func configPath() (string, error) {

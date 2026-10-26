@@ -9,10 +9,10 @@ import (
 )
 
 func TestDescribeStorageNamesTheBackendHonestly(t *testing.T) {
-	if got := describeStorage(keyring.FileBackend, "/home/u/.filament/keyring"); got != "an encrypted file in /home/u/.filament/keyring" {
+	if got := describeStorage(keyring.FileBackend, "/home/u/.flmnt/keyring"); got != "an encrypted file in /home/u/.flmnt/keyring" {
 		t.Fatalf("file backend description = %q", got)
 	}
-	if got := describeStorage(keyring.FileBackend, ""); got != "an encrypted file under ~/.filament/keyring" {
+	if got := describeStorage(keyring.FileBackend, ""); got != "an encrypted file under ~/.flmnt/keyring" {
 		t.Fatalf("file backend fallback description = %q", got)
 	}
 	if got := describeStorage(keyring.KeychainBackend, "/x"); got != "the OS keychain" {
