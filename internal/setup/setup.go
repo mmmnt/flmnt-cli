@@ -48,6 +48,10 @@ type ProjectConfig struct {
 	// VolumesPath is where the local node keeps every store's data on the host (default ~/.flmnt/volumes,
 	// read by the harness that starts the node); setup preserves it.
 	VolumesPath string `json:"volumes_path,omitempty"`
+	// ComposeFiles are the checkout's compose files, stacked in order on flmnt's baseline harness by
+	// `flmnt local`; EnvFile is the env file compose reads with them. Both relative to the checkout.
+	ComposeFiles []string `json:"compose_files,omitempty"`
+	EnvFile      string   `json:"env_file,omitempty"`
 }
 
 // The two .mcp.json server entries `setup` can manage:

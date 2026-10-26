@@ -30,3 +30,39 @@ func VolumesPath(pc *setup.ProjectConfig) (string, error) {
 	}
 	return filepath.Join(dir, "volumes"), nil
 }
+
+// Baseline is flmnt's own harness compose file, the release's, cached under ~/.flmnt/harness.
+func Baseline() (string, error) {
+	dir, err := home.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "harness", "compose.yaml"), nil
+}
+
+// ComposeArgs is the docker argument list for one compose call: the baseline when it is there, then
+// each of the checkout's compose files in order, then its env file, then args.
+func ComposeArgs(projectDir string, pc *setup.ProjectConfig, args []string) ([]string, error) {
+	out := []string{"compose"}
+	baseline, err := Baseline()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(baseline); err == nil {
+		out = append(out, "-f", baseline)
+	}
+	for _, f := range pc.ComposeFiles {
+		out = append(out, "-f", inProject(projectDir, f))
+	}
+	if pc.EnvFile != "" {
+		out = append(out, "--env-file", inProject(projectDir, pc.EnvFile))
+	}
+	return append(out, args...), nil
+}
+
+func inProject(projectDir, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(projectDir, p)
+}
