@@ -84,7 +84,7 @@ ever after, a hosted login keeps it (a person signed in to the cloud still pushe
 local records as it), and no logout removes it. `whoami` answers by the session's kind, never by which
 credential happens to exist. Every command takes its upstream from the session, so a logged-in person
 never passes `--server-url`; the chain is `--server-url` / `QUORUM_SERVER_URL` / **the login** /
-`.quorum.json` (the repo answers only when nothing is logged in). A loopback host —
+`.flmnt.json` (the repo answers only when nothing is logged in). A loopback host —
 `http://localhost:8000/mcp` — is local, anything else is hosted. The hosted path is unchanged:
 credentials come from the keychain `flmnt login` filled.
 
@@ -180,7 +180,7 @@ substituted, and `flmnt health` reports the local token — who it is for, or th
 no headers, and the client runs the OAuth flow the MCP advertises.
 
 A local server has no OAuth discovery to advertise its router, so the checkout declares it in
-`.quorum.json` as `"local_graphql_endpoint": "http://localhost:4000/graphql"`; on a loopback server
+`.flmnt.json` as `"local_graphql_endpoint": "http://localhost:4000/graphql"`; on a loopback server
 that is read before the `<server>/graphql` fallback (`--graphql-endpoint` / `FILAMENT_GRAPHQL_ENDPOINT`
 still win), and `flmnt setup` preserves the field. `flmnt setup` always rewrites the `flmnt` entry of
 `.mcp.json` to what it is asked for (other servers stay as they are); `pnpm env:local` in the checkout
@@ -191,7 +191,8 @@ restores the local entry.
 `brief`, `derive`, `gate` and `record-*` resolve the project in this order, first match wins:
 
 1. an explicit `--project <name|id>` on the command
-2. `project_id` in the repo's `.quorum.json` — written by `flmnt setup --project`
+2. `project_id` in the repo's `.flmnt.json` — written by `flmnt setup --project` (a repo still holding
+   the former `.quorum.json` alone is read from it, and `flmnt whoami` says to rename it)
 3. the active workspace (`flmnt workspace use`)
 
 Step 3 is the fallback of last resort, not the norm. A repo that reaches it has no identity of its
