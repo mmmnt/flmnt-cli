@@ -126,6 +126,13 @@ func writeProjectConfig(dir string, cfg Config) error {
 	return writeJSON(filepath.Join(dir, ProjectConfigFile), pc)
 }
 
+// UsesLegacyProjectConfig reports a checkout whose configuration still carries the former name alone.
+func UsesLegacyProjectConfig(dir string) bool {
+	_, current := os.Stat(filepath.Join(dir, ProjectConfigFile))
+	_, legacy := os.Stat(filepath.Join(dir, LegacyProjectConfigFile))
+	return errors.Is(current, fs.ErrNotExist) && legacy == nil
+}
+
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 	if dir == "" {
 		var err error

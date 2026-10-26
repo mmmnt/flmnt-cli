@@ -65,7 +65,7 @@ func runAuthHeader(cmd *cobra.Command, args []string) error {
 // QUORUM_SERVER_URL, then THE LOGIN. The CLI holds one login at a time and records which server it
 // was made against, so a logged-in person never has to say where a command goes: `flmnt login`
 // points everything at the hosted MCP, `flmnt login --local` at the loopback server. A repo's own
-// .quorum.json answers only when nothing is logged in — it used to outrank the login, which is how
+// .flmnt.json answers only when nothing is logged in — it used to outrank the login, which is how
 // a local login in a repo pinned to production kept reporting the production account.
 func resolveAuthServerURL(cmd *cobra.Command) string {
 	if v, _ := cmd.Flags().GetString("server-url"); v != "" {

@@ -26,7 +26,7 @@ func newRecordClient(cmd *cobra.Command) (record.Client, string, error) {
 		project = record.WorkspaceFromURL(serverURL)
 	}
 	if project == "" {
-		return record.Client{}, "", fmt.Errorf("no project: pass --project, set project_id in .quorum.json, or select an active workspace")
+		return record.Client{}, "", fmt.Errorf("no project: pass --project, set project_id in .flmnt.json, or select an active workspace")
 	}
 	gql, err := graphQLClientFor(cmd, serverURL)
 	if err != nil {

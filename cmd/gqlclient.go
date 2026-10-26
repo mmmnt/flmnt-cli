@@ -12,7 +12,7 @@ import (
 
 // resolveGraphQLEndpointFor resolves the router GraphQL endpoint for a server URL: an explicit flag or
 // env, else the MCP discovery's graphql_endpoint, else — on a loopback server, which has no discovery
-// — the local_graphql_endpoint the checkout declares in .quorum.json, else serverURL/graphql.
+// — the local_graphql_endpoint the checkout declares in .flmnt.json, else serverURL/graphql.
 func resolveGraphQLEndpointFor(cmd *cobra.Command, serverURL string) string {
 	flag, _ := cmd.Flags().GetString("graphql-endpoint")
 	env := envOr("FILAMENT_GRAPHQL_ENDPOINT", "")

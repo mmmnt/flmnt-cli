@@ -206,7 +206,7 @@ func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 	}
 	project := resolveProject(cmd, repoDir)
 	if project == "" {
-		return nil, fmt.Errorf("no project: pass --project, set project_id in .quorum.json (`flmnt setup --project`), or select an active workspace")
+		return nil, fmt.Errorf("no project: pass --project, set project_id in .flmnt.json (`flmnt setup --project`), or select an active workspace")
 	}
 	gql, err := graphQLClientFor(cmd, serverURL)
 	if err != nil {

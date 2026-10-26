@@ -430,3 +430,19 @@ func TestRunPreservesTheVolumesPathDeclaration(t *testing.T) {
 		t.Fatalf("got %+v err %v", pc, err)
 	}
 }
+
+func TestLegacyProjectConfigIsReportedOnlyWhenTheCheckoutHoldsTheFormerNameAlone(t *testing.T) {
+	legacy, both := t.TempDir(), t.TempDir()
+	for _, d := range []string{legacy, both} {
+		if err := os.WriteFile(filepath.Join(d, ".quorum.json"), []byte(`{"server_url":"x"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(both, ".flmnt.json"), []byte(`{"server_url":"x"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if !UsesLegacyProjectConfig(legacy) || UsesLegacyProjectConfig(both) || UsesLegacyProjectConfig(t.TempDir()) {
+		t.Fatal("want true only for a checkout holding .quorum.json alone")
+	}
+}

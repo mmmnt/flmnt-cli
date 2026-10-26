@@ -24,7 +24,7 @@ var whoamiCmd = &cobra.Command{
 		"tool. Not logged in: nothing on stdout, the reason on stderr, exit 1.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// The same resolution every other command uses, so standing in a configured repo is enough:
-		// whoami used to refuse with the server_url its own .quorum.json was declaring.
+		// whoami used to refuse with the server_url its own .flmnt.json was declaring.
 		serverURL := resolveAuthServerURL(cmd)
 		cfg, _ := authHeaderLoadConfig()
 		kind := loginKind(cfg, serverURL)
@@ -67,6 +67,9 @@ var whoamiCmd = &cobra.Command{
 			pinned, pinnedName = pc.ProjectID, pc.ProjectName
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), whoamiLine(who, cfg.ActiveWorkspaceName, pinned, pinnedName))
+		if setup.UsesLegacyProjectConfig(".") {
+			fmt.Fprintf(cmd.ErrOrStderr(), "this checkout's %s is the former name: rename it %s\n", setup.LegacyProjectConfigFile, setup.ProjectConfigFile)
+		}
 		return nil
 	},
 }
