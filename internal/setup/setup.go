@@ -45,6 +45,9 @@ type ProjectConfig struct {
 	// LocalGraphQLEndpoint is where the checkout's local flmnt publishes its router. A local server
 	// has no OAuth discovery to advertise it, so the checkout declares it here; setup preserves it.
 	LocalGraphQLEndpoint string `json:"local_graphql_endpoint,omitempty"`
+	// VolumesPath is where the local node keeps every store's data on the host (default ~/.flmnt/volumes,
+	// read by the harness that starts the node); setup preserves it.
+	VolumesPath string `json:"volumes_path,omitempty"`
 }
 
 // The two .mcp.json server entries `setup` can manage:
@@ -118,6 +121,7 @@ func writeProjectConfig(dir string, cfg Config) error {
 	pc := ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName, CorpusProject: cfg.CorpusProject}
 	if existing, err := LoadProjectConfig(dir); err == nil {
 		pc.LocalGraphQLEndpoint = existing.LocalGraphQLEndpoint
+		pc.VolumesPath = existing.VolumesPath
 	}
 	return writeJSON(filepath.Join(dir, ProjectConfigFile), pc)
 }

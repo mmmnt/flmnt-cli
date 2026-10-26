@@ -413,3 +413,20 @@ func TestRunWritesFlmntJSON(t *testing.T) {
 		t.Fatalf(".flmnt.json = %s (%v), want project_id p-written", b, err)
 	}
 }
+
+func TestRunPreservesTheVolumesPathDeclaration(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"server_url":"http://localhost:8000/mcp","project_id":"p","volumes_path":"~/.flmnt/volumes"}`
+	if err := os.WriteFile(filepath.Join(dir, ".flmnt.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	pc, err := LoadProjectConfig(dir)
+	if err != nil || pc.VolumesPath != "~/.flmnt/volumes" {
+		t.Fatalf("got %+v err %v", pc, err)
+	}
+}
