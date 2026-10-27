@@ -423,6 +423,9 @@ func writeSettingsLocalJSON(dir string, cfg Config, current map[string]any) erro
 
 	// Start from the existing file (preserve unmanaged keys like enabledMcpjsonServers), then set the
 	// managed sections: the full hook map + the merged permission allow-list.
+	if current == nil {
+		current = map[string]any{}
+	}
 	current["hooks"] = buildHooks(cfg)
 	current["permissions"] = mergePermissions(current["permissions"])
 	return writeJSON(path, current)

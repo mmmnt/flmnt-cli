@@ -591,3 +591,21 @@ func TestRunKeepsTopLevelMCPJSONKeysItDoesNotOwn(t *testing.T) {
 		t.Fatalf(".mcp.json = %s", b)
 	}
 }
+
+func TestRunWritesSettingsOverASettingsLocalJSONHoldingNull(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".claude", "settings.local.json"), []byte("null"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if readSettings(t, dir)["hooks"] == nil {
+		t.Fatal("hooks missing")
+	}
+}
