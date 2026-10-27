@@ -507,3 +507,40 @@ func TestRunRefusesAMalformedFlmntJSONAndWritesNothing(t *testing.T) {
 		t.Fatal(".mcp.json written after a refused .flmnt.json")
 	}
 }
+
+func TestRunRefusesAMalformedLegacyQuorumJSONAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"server_url": "http://localhost:8000/mcp" "project_id": "p"}`
+	if err := os.WriteFile(filepath.Join(dir, ".quorum.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir})
+
+	if err == nil || !strings.Contains(err.Error(), ".quorum.json") || !strings.Contains(err.Error(), "line 1") {
+		t.Fatalf("Run error = %v, want one naming .quorum.json and line 1", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".flmnt.json")); statErr == nil {
+		t.Fatal(".flmnt.json written after a refused .quorum.json")
+	}
+}
+
+func TestRunRefusesAMalformedMCPJSONAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"mcpServers": {"mine": {"type": "stdio", "command": "x"}}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir})
+
+	if err == nil || !strings.Contains(err.Error(), ".mcp.json") || !strings.Contains(err.Error(), "line 1") {
+		t.Fatalf("Run error = %v, want one naming .mcp.json and line 1", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, ".mcp.json")); string(b) != seed {
+		t.Fatalf(".mcp.json rewritten: %s", b)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".flmnt.json")); statErr == nil {
+		t.Fatal(".flmnt.json written after a refused .mcp.json")
+	}
+}

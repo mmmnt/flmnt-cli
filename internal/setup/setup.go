@@ -108,10 +108,16 @@ func Run(cfg Config) error {
 	if err != nil {
 		return err
 	}
+	var mcp struct {
+		McpServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	if err := readJSONFile(filepath.Join(dir, ".mcp.json"), &mcp); err != nil {
+		return err
+	}
 	if err := writeProjectConfig(dir, cfg, project); err != nil {
 		return fmt.Errorf("writing %s: %w", ProjectConfigFile, err)
 	}
-	if err := writeMCPJSON(dir, cfg); err != nil {
+	if err := writeMCPJSON(dir, cfg, mcp.McpServers); err != nil {
 		return fmt.Errorf("writing .mcp.json: %w", err)
 	}
 	if err := writeHookScripts(dir); err != nil {
@@ -256,7 +262,7 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 // --proxy doesn't leave a dead duplicate connection. `flmnt-proxy` is a setup-only name, so
 // removing it never touches a user's own server. The `flmnt` entry itself is rewritten no matter
 // what it held — a loopback URL or a headersHelper included (founder ruling).
-func writeMCPJSON(dir string, cfg Config) error {
+func writeMCPJSON(dir string, cfg Config, existing map[string]json.RawMessage) error {
 	path := filepath.Join(dir, ".mcp.json")
 
 	managed, entry, err := managedServer(cfg)
@@ -265,21 +271,14 @@ func writeMCPJSON(dir string, cfg Config) error {
 	}
 
 	servers := map[string]json.RawMessage{}
-	if existing, err := os.ReadFile(path); err == nil {
-		var current struct {
-			McpServers map[string]json.RawMessage `json:"mcpServers"`
+	for k, v := range existing {
+		if k == managed {
+			continue // we rewrite this one below
 		}
-		if err := json.Unmarshal(existing, &current); err == nil {
-			for k, v := range current.McpServers {
-				if k == managed {
-					continue // we rewrite this one below
-				}
-				if !cfg.Proxy && k == proxyServerName {
-					continue // direct mode cleans up a stale setup-managed proxy entry
-				}
-				servers[k] = v // preserve verbatim
-			}
+		if !cfg.Proxy && k == proxyServerName {
+			continue // direct mode cleans up a stale setup-managed proxy entry
 		}
+		servers[k] = v // preserve verbatim
 	}
 	servers[managed] = entry
 
