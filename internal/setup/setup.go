@@ -104,7 +104,11 @@ func Run(cfg Config) error {
 		}
 	}
 
-	if err := writeProjectConfig(dir, cfg); err != nil {
+	project, err := readProjectConfigs(dir)
+	if err != nil {
+		return err
+	}
+	if err := writeProjectConfig(dir, cfg, project); err != nil {
 		return fmt.Errorf("writing %s: %w", ProjectConfigFile, err)
 	}
 	if err := writeMCPJSON(dir, cfg); err != nil {
@@ -122,25 +126,75 @@ func Run(cfg Config) error {
 	return nil
 }
 
-func writeProjectConfig(dir string, cfg Config) error {
+func writeProjectConfig(dir string, cfg Config, existing map[string]json.RawMessage) error {
 	pc := ProjectConfig{ServerURL: cfg.ServerURL, ProjectID: cfg.ProjectID, ProjectName: cfg.ProjectName, CorpusProject: cfg.CorpusProject}
-	if existing, err := LoadProjectConfig(dir); err == nil {
-		pc.LocalGraphQLEndpoint = existing.LocalGraphQLEndpoint
-		pc.VolumesPath = existing.VolumesPath
-		pc.ComposeFiles = existing.ComposeFiles
-		pc.EnvFile = existing.EnvFile
+	var kept ProjectConfig
+	if b, err := json.Marshal(existing); err == nil && json.Unmarshal(b, &kept) == nil {
+		pc.LocalGraphQLEndpoint = kept.LocalGraphQLEndpoint
+		pc.VolumesPath = kept.VolumesPath
+		pc.ComposeFiles = kept.ComposeFiles
+		pc.EnvFile = kept.EnvFile
 	}
-	return writeJSON(filepath.Join(dir, ProjectConfigFile), mergeUnowned(dir, pc))
+	return writeJSON(filepath.Join(dir, ProjectConfigFile), mergeUnowned(existing, pc))
+}
+
+// readProjectConfigs parses the checkout's existing configuration (the former name first, then the current one over
+// it) before anything is written, so a rewrite carries every key it held. A file that does not parse stops setup with
+// its position, and nothing is written.
+func readProjectConfigs(dir string) (map[string]json.RawMessage, error) {
+	out := map[string]json.RawMessage{}
+	for _, name := range []string{LegacyProjectConfigFile, ProjectConfigFile} {
+		if err := readJSONFile(filepath.Join(dir, name), &out); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// readJSONFile decodes path into v; an absent file leaves v as it was.
+func readJSONFile(path string, v any) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, v); err != nil {
+		return parseError(path, data, err)
+	}
+	return nil
+}
+
+func parseError(path string, data []byte, err error) error {
+	var offset int64
+	var syntax *json.SyntaxError
+	var typed *json.UnmarshalTypeError
+	switch {
+	case errors.As(err, &syntax):
+		offset = syntax.Offset
+	case errors.As(err, &typed):
+		offset = typed.Offset
+	default:
+		return fmt.Errorf("%s cannot be read: %v; fix it and run setup again (nothing was written)", path, err)
+	}
+	line, column := 1, 1
+	for _, c := range data[:min(int(offset), len(data))] {
+		if c == '\n' {
+			line, column = line+1, 1
+		} else {
+			column++
+		}
+	}
+	return fmt.Errorf("%s is not valid JSON at line %d, column %d: %v; fix it and run setup again (nothing was written)", path, line, column, err)
 }
 
 // mergeUnowned is pc with every key of the checkout's existing configuration that ProjectConfig does not own carried
 // over as it was, so an entry another tool keeps in .flmnt.json survives a rewrite.
-func mergeUnowned(dir string, pc ProjectConfig) map[string]json.RawMessage {
+func mergeUnowned(existing map[string]json.RawMessage, pc ProjectConfig) map[string]json.RawMessage {
 	out := map[string]json.RawMessage{}
-	for _, name := range []string{LegacyProjectConfigFile, ProjectConfigFile} {
-		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
-			_ = json.Unmarshal(b, &out)
-		}
+	for k, v := range existing {
+		out[k] = v
 	}
 	owned, _ := json.Marshal(pc)
 	var fields map[string]json.RawMessage

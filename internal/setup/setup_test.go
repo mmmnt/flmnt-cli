@@ -487,3 +487,23 @@ func TestRunKeepsKeysItDoesNotOwn(t *testing.T) {
 		t.Fatalf(".flmnt.json = %s", b)
 	}
 }
+
+func TestRunRefusesAMalformedFlmntJSONAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	seed := "{\n  \"server_url\": \"http://localhost:8000/mcp\",\n  \"tool\": {\"store\": \".tool\",}\n}"
+	if err := os.WriteFile(filepath.Join(dir, ".flmnt.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir})
+
+	if err == nil || !strings.Contains(err.Error(), ".flmnt.json") || !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("Run error = %v, want one naming .flmnt.json and line 3", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, ".flmnt.json")); string(b) != seed {
+		t.Fatalf(".flmnt.json rewritten: %s", b)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".mcp.json")); statErr == nil {
+		t.Fatal(".mcp.json written after a refused .flmnt.json")
+	}
+}
