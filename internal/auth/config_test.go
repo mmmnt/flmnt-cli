@@ -3,6 +3,7 @@ package auth
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -83,5 +84,30 @@ func TestClearConfigRemovesFile(t *testing.T) {
 	cfg, _ := LoadConfig()
 	if cfg.ActiveWorkspaceID != "" {
 		t.Fatalf("expected empty after clear, got %+v", cfg)
+	}
+}
+
+func TestSaveConfigRefusesToOverwriteAConfigThatDoesNotParse(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	path, err := configPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	seed := `{"server_url": "https://x/mcp",}`
+	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err = SaveConfig(CLIConfig{ServerURL: "https://y/mcp"})
+
+	if err == nil || !strings.Contains(err.Error(), path) {
+		t.Fatalf("SaveConfig error = %v, want one naming %s", err, path)
+	}
+	if b, _ := os.ReadFile(path); string(b) != seed {
+		t.Fatalf("config rewritten: %s", b)
 	}
 }

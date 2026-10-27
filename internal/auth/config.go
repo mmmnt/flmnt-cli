@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/mmmnt/flmnt-cli/internal/home"
 	"io/fs"
 	"os"
@@ -80,6 +81,9 @@ func SaveConfig(cfg CLIConfig) error {
 	path, err := configPath()
 	if err != nil {
 		return err
+	}
+	if existing, err := os.ReadFile(path); err == nil && !json.Valid(existing) {
+		return fmt.Errorf("%s is not valid JSON; fix or remove it and try again (it was left as it was)", path)
 	}
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
