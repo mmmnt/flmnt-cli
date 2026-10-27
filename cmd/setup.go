@@ -22,6 +22,10 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 		project, _ := cmd.Flags().GetString("project")
 		proxy, _ := cmd.Flags().GetBool("proxy")
 
+		if err := setup.CheckConfigs(""); err != nil {
+			return err
+		}
+
 		flmntCmd, err := resolveGateCmd()
 		if err != nil {
 			return fmt.Errorf("cannot locate flmnt binary: %w", err)

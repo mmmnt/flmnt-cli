@@ -94,6 +94,18 @@ var kitTools = []string{
 	"mcp__flmnt__record_mistake", "mcp__flmnt__create_stream",
 }
 
+// CheckConfigs parses every configuration file setup rewrites in dir, so a caller can stop on a file it cannot read
+// before doing anything else.
+func CheckConfigs(dir string) error {
+	if _, err := readProjectConfigs(dir); err != nil {
+		return err
+	}
+	if err := readJSONFile(filepath.Join(dir, ".mcp.json"), &map[string]json.RawMessage{}); err != nil {
+		return err
+	}
+	return readJSONFile(filepath.Join(dir, ".claude", "settings.local.json"), &map[string]any{})
+}
+
 func Run(cfg Config) error {
 	dir := cfg.Dir
 	if dir == "" {
