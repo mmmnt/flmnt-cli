@@ -108,16 +108,18 @@ func Run(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	var mcp struct {
-		McpServers map[string]json.RawMessage `json:"mcpServers"`
-	}
+	mcp := map[string]json.RawMessage{}
 	if err := readJSONFile(filepath.Join(dir, ".mcp.json"), &mcp); err != nil {
+		return err
+	}
+	settings := map[string]any{}
+	if err := readJSONFile(filepath.Join(dir, ".claude", "settings.local.json"), &settings); err != nil {
 		return err
 	}
 	if err := writeProjectConfig(dir, cfg, project); err != nil {
 		return fmt.Errorf("writing %s: %w", ProjectConfigFile, err)
 	}
-	if err := writeMCPJSON(dir, cfg, mcp.McpServers); err != nil {
+	if err := writeMCPJSON(dir, cfg, mcp); err != nil {
 		return fmt.Errorf("writing .mcp.json: %w", err)
 	}
 	if err := writeHookScripts(dir); err != nil {
@@ -126,7 +128,7 @@ func Run(cfg Config) error {
 	if err := writeCommands(dir); err != nil {
 		return fmt.Errorf("writing slash commands: %w", err)
 	}
-	if err := writeSettingsLocalJSON(dir, cfg); err != nil {
+	if err := writeSettingsLocalJSON(dir, cfg, settings); err != nil {
 		return fmt.Errorf("writing settings.local.json: %w", err)
 	}
 	return nil
@@ -262,7 +264,7 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 // --proxy doesn't leave a dead duplicate connection. `flmnt-proxy` is a setup-only name, so
 // removing it never touches a user's own server. The `flmnt` entry itself is rewritten no matter
 // what it held — a loopback URL or a headersHelper included (founder ruling).
-func writeMCPJSON(dir string, cfg Config, existing map[string]json.RawMessage) error {
+func writeMCPJSON(dir string, cfg Config, document map[string]json.RawMessage) error {
 	path := filepath.Join(dir, ".mcp.json")
 
 	managed, entry, err := managedServer(cfg)
@@ -270,6 +272,12 @@ func writeMCPJSON(dir string, cfg Config, existing map[string]json.RawMessage) e
 		return err
 	}
 
+	existing := map[string]json.RawMessage{}
+	if raw, ok := document["mcpServers"]; ok {
+		if err := json.Unmarshal(raw, &existing); err != nil {
+			return fmt.Errorf("mcpServers is not an object: %w", err)
+		}
+	}
 	servers := map[string]json.RawMessage{}
 	for k, v := range existing {
 		if k == managed {
@@ -282,7 +290,12 @@ func writeMCPJSON(dir string, cfg Config, existing map[string]json.RawMessage) e
 	}
 	servers[managed] = entry
 
-	return writeJSON(path, map[string]any{"mcpServers": servers})
+	out := map[string]any{}
+	for k, v := range document {
+		out[k] = v
+	}
+	out["mcpServers"] = servers
+	return writeJSON(path, out)
 }
 
 // managedServer returns the name and JSON of the single entry setup manages for this mode.
@@ -401,7 +414,7 @@ func mergePermissions(existing any) map[string]any {
 	return out
 }
 
-func writeSettingsLocalJSON(dir string, cfg Config) error {
+func writeSettingsLocalJSON(dir string, cfg Config, current map[string]any) error {
 	claudeDir := filepath.Join(dir, ".claude")
 	if err := os.MkdirAll(claudeDir, 0755); err != nil {
 		return err
@@ -410,10 +423,6 @@ func writeSettingsLocalJSON(dir string, cfg Config) error {
 
 	// Start from the existing file (preserve unmanaged keys like enabledMcpjsonServers), then set the
 	// managed sections: the full hook map + the merged permission allow-list.
-	current := map[string]any{}
-	if existing, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(existing, &current)
-	}
 	current["hooks"] = buildHooks(cfg)
 	current["permissions"] = mergePermissions(current["permissions"])
 	return writeJSON(path, current)

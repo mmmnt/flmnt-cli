@@ -544,3 +544,50 @@ func TestRunRefusesAMalformedMCPJSONAndWritesNothing(t *testing.T) {
 		t.Fatal(".flmnt.json written after a refused .mcp.json")
 	}
 }
+
+func TestRunRefusesAMalformedSettingsLocalJSONAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seed := "{\n  \"enabledMcpjsonServers\": [\"mine\"]\n  \"env\": {}\n}"
+	if err := os.WriteFile(filepath.Join(dir, ".claude", "settings.local.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir})
+
+	if err == nil || !strings.Contains(err.Error(), "settings.local.json") || !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("Run error = %v, want one naming settings.local.json and line 3", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json")); string(b) != seed {
+		t.Fatalf("settings.local.json rewritten: %s", b)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".flmnt.json")); statErr == nil {
+		t.Fatal(".flmnt.json written after a refused settings.local.json")
+	}
+}
+
+func TestRunKeepsTopLevelMCPJSONKeysItDoesNotOwn(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"mcpServers": {"mine": {"type": "stdio", "command": "x"}}, "x-team": {"owner": "ops"}}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Run(Config{ServerURL: "http://localhost:8000/mcp", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	var got struct {
+		McpServers map[string]any `json:"mcpServers"`
+		Team       map[string]any `json:"x-team"`
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Team["owner"] != "ops" || got.McpServers["mine"] == nil || got.McpServers["flmnt"] == nil {
+		t.Fatalf(".mcp.json = %s", b)
+	}
+}
