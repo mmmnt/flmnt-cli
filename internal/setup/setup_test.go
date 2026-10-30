@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func readSettings(t *testing.T, dir string) map[string]any {
@@ -833,5 +834,136 @@ func TestRunReplacesAKitHookAnEarlierRunWroteFromAQuotedPathWithSpaces(t *testin
 	}
 	if got := hookCommands(t, dir, "UserPromptSubmit"); count(got, `"/Applications/My Tools/flmnt" gate`) != 0 || count(got, "/new/bin/flmnt gate") != 1 {
 		t.Fatalf("UserPromptSubmit = %v", got)
+	}
+}
+
+// writtenFiles is every file setup writes in dir, so a test can tell whether a run touched any of them.
+func writtenFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	var out []string
+	for _, name := range []string{ProjectConfigFile, ".mcp.json", filepath.Join(".claude", "settings.local.json")} {
+		out = append(out, filepath.Join(dir, name))
+	}
+	for _, sub := range []string{filepath.Join(".claude", "commands"), hookScriptsRel} {
+		entries, err := os.ReadDir(filepath.Join(dir, sub))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			out = append(out, filepath.Join(dir, sub, e.Name()))
+		}
+	}
+	return out
+}
+
+func TestRunKeepsTheTrailingNewlineOfAFileItRewrites(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte("{\n  \"mcpServers\": {}\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if !strings.HasSuffix(string(b), "}\n") || strings.HasSuffix(string(b), "\n\n") {
+		t.Fatalf(".mcp.json lost its trailing newline:\n%q", b)
+	}
+}
+
+func TestRunDoesNotGiveATrailingNewlineToAFileWithoutOne(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	if strings.HasSuffix(string(b), "\n") {
+		t.Fatalf(".mcp.json was given a trailing newline:\n%q", b)
+	}
+}
+
+func TestRunWritesANewConfigFileWithoutATrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{ProjectConfigFile, ".mcp.json", filepath.Join(".claude", "settings.local.json")} {
+		b, _ := os.ReadFile(filepath.Join(dir, name))
+		if strings.HasSuffix(string(b), "\n") {
+			t.Fatalf("new %s ends in a newline:\n%q", name, b)
+		}
+	}
+}
+
+func TestRunKeepsTheCRLFLineEndingsOfAFileItRewrites(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte("{\r\n  \"mcpServers\": {}\r\n}\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".mcp.json"))
+	s := string(b)
+	if strings.Count(s, "\n") != strings.Count(s, "\r\n") || !strings.HasSuffix(s, "}\r\n") {
+		t.Fatalf(".mcp.json did not keep CRLF line endings:\n%q", b)
+	}
+}
+
+func TestRunDoesNotRewriteAConfigFileWhoseBytesWouldNotChange(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte("{\n  \"x\": 1\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{ServerURL: "u", ProjectID: "p", Dir: dir}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-time.Hour).Truncate(time.Second)
+	for _, name := range []string{ProjectConfigFile, ".mcp.json", filepath.Join(".claude", "settings.local.json")} {
+		if err := os.Chtimes(filepath.Join(dir, name), past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{ProjectConfigFile, ".mcp.json", filepath.Join(".claude", "settings.local.json")} {
+		fi, err := os.Stat(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fi.ModTime().Equal(past) {
+			t.Fatalf("%s was rewritten though its bytes did not change (mtime %v, want %v)", name, fi.ModTime(), past)
+		}
+	}
+}
+
+func TestRunDoesNotRewriteAnInstalledCommandOrHookScriptThatIsUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{ServerURL: "u", ProjectID: "p", Dir: dir}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-time.Hour).Truncate(time.Second)
+	files := writtenFiles(t, dir)[3:]
+	for _, f := range files {
+		if err := os.Chtimes(f, past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		fi, err := os.Stat(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fi.ModTime().Equal(past) {
+			t.Fatalf("%s was rewritten though it did not change", f)
+		}
 	}
 }

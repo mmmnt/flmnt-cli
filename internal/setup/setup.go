@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -365,7 +366,7 @@ func writeEmbeddedDir(srcDir, dstDir string, mode os.FileMode) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dstDir, e.Name()), b, mode); err != nil {
+		if err := writeIfChanged(filepath.Join(dstDir, e.Name()), b, mode); err != nil {
 			return err
 		}
 	}
@@ -590,12 +591,37 @@ func writeSettingsLocalJSON(dir string, cfg Config, current map[string]any) erro
 	return writeJSON(path, current)
 }
 
+// writeJSON writes v to path in the file's own conventions: an existing file keeps its line endings
+// (CRLF stays CRLF) and its trailing newline, or its lack of one; a new file has none. A file whose
+// bytes would not change is not written at all.
 func writeJSON(path string, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	current, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err == nil {
+		eol := []byte("\n")
+		if bytes.Contains(current, []byte("\r\n")) {
+			eol = []byte("\r\n")
+			data = bytes.ReplaceAll(data, []byte("\n"), eol)
+		}
+		if bytes.HasSuffix(current, []byte("\n")) {
+			data = append(data, eol...)
+		}
+	}
+	return writeIfChanged(path, data, 0644)
+}
+
+// writeIfChanged writes data to path unless the file already holds exactly those bytes.
+func writeIfChanged(path string, data []byte, mode os.FileMode) error {
+	if current, err := os.ReadFile(path); err == nil && bytes.Equal(current, data) {
+		return nil
+	}
+	return os.WriteFile(path, data, mode)
 }
 
 // CommandCount is the number of slash commands the kit installs, read from the catalog itself so a
