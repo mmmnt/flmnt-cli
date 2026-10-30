@@ -6,11 +6,13 @@
 #
 # Stream ids are STRICT ('{workspaceId}::{type}') and must be resolved from the live workspace via
 # list_streams — a fabricated id (e.g. derived from a filesystem path) makes every stream-scoped call
-# fail with workspace_not_found. QUORUM_PROJECT_ID is honored only when explicitly configured.
+# fail with workspace_not_found. FLMNT_PROJECT_ID (or its former name, QUORUM_PROJECT_ID) is honored only
+# when explicitly configured.
 
-if [[ -n "$QUORUM_PROJECT_ID" ]]; then
-  DOMAIN_REF="'${QUORUM_PROJECT_ID}::domain'"
-  PLAN_REF="record_plan('${QUORUM_PROJECT_ID}::plan', ...)"
+PROJECT_ID="${FLMNT_PROJECT_ID:-${QUORUM_PROJECT_ID:-}}"
+if [[ -n "$PROJECT_ID" ]]; then
+  DOMAIN_REF="'${PROJECT_ID}::domain'"
+  PLAN_REF="record_plan('${PROJECT_ID}::plan', ...)"
 else
   DOMAIN_REF="the workspace's domain stream (resolve the exact streamId via list_streams first — never guess one or derive it from a filesystem path)"
   PLAN_REF="record_plan on the resolved plan stream"

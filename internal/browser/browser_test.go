@@ -3,6 +3,7 @@ package browser
 import "testing"
 
 func TestDashboardURLDerivesTheEnvironmentFromTheServerURL(t *testing.T) {
+	t.Setenv("FLMNT_DASHBOARD_URL", "")
 	t.Setenv("QUORUM_DASHBOARD_URL", "")
 
 	if got := DashboardURL("https://mcp.production.flmnt.ai/mcp"); got != "https://production.flmnt.ai" {

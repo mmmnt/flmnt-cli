@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/mmmnt/flmnt-cli/internal/identity"
 	"github.com/spf13/cobra"
@@ -23,12 +24,12 @@ var (
 // identity is never invented.
 //
 // It is also THE login from here on: the session config records the local kind and the loopback
-// server it is for (--server-url / QUORUM_SERVER_URL when they name one, else the harness default),
+// server it is for (--server-url / FLMNT_SERVER_URL when they name one, else the harness default),
 // so every command resolves its upstream from the login and needs no flag; and, one login at a time,
 // every hosted token is cleared, so nothing hosted can answer for this person again. The CLI's own
 // harness token is then obtained for that server (runLocalToken).
 func runLocalLogin(cmd *cobra.Command) error {
-	serverURL := firstNonEmpty(flagString(cmd, "server-url"), envOr("QUORUM_SERVER_URL", ""), defaultLocalURL)
+	serverURL := firstNonEmpty(flagString(cmd, "server-url"), env.Get("SERVER_URL"), defaultLocalURL)
 	if !httpx.IsLoopback(serverURL) {
 		return fmt.Errorf("local login refused: %s is not a loopback server (a local login is for a local flmnt; `flmnt login` signs in to a hosted one)", serverURL)
 	}

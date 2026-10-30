@@ -3,6 +3,7 @@ package setup
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -607,5 +608,39 @@ func TestRunWritesSettingsOverASettingsLocalJSONHoldingNull(t *testing.T) {
 
 	if readSettings(t, dir)["hooks"] == nil {
 		t.Fatal("hooks missing")
+	}
+}
+
+func runPrecompact(t *testing.T, env ...string) string {
+	t.Helper()
+	b, err := assets.ReadFile("assets/hooks/precompact-checkpoint.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(t.TempDir(), "precompact-checkpoint.sh")
+	if err := os.WriteFile(script, b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command("bash", script)
+	c.Env = append([]string{"PATH=" + os.Getenv("PATH")}, env...)
+	c.Stdin = strings.NewReader("")
+	out, err := c.Output()
+	if err != nil {
+		t.Fatalf("precompact hook: %v", err)
+	}
+	return string(out)
+}
+
+func TestPrecompactHookNamesTheProjectFromFlmntProjectIDOverQuorumProjectID(t *testing.T) {
+	out := runPrecompact(t, "FLMNT_PROJECT_ID=ws-flmnt", "QUORUM_PROJECT_ID=ws-quorum")
+	if !strings.Contains(out, "ws-flmnt::plan") || strings.Contains(out, "ws-quorum") {
+		t.Fatalf("got %q", out)
+	}
+}
+
+func TestPrecompactHookStillNamesTheProjectFromQuorumProjectIDAlone(t *testing.T) {
+	out := runPrecompact(t, "QUORUM_PROJECT_ID=ws-quorum")
+	if !strings.Contains(out, "ws-quorum::plan") {
+		t.Fatalf("got %q", out)
 	}
 }

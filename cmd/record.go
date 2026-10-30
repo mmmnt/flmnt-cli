@@ -17,7 +17,7 @@ import (
 func newRecordClient(cmd *cobra.Command) (record.Client, string, error) {
 	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
-		return record.Client{}, "", fmt.Errorf("no server URL: run `flmnt login`, set QUORUM_SERVER_URL, or pass --server-url")
+		return record.Client{}, "", fmt.Errorf("no server URL: run `flmnt login`, set FLMNT_SERVER_URL, or pass --server-url")
 	}
 	cwd, _ := os.Getwd()
 	project := resolveProject(cmd, cwd)
@@ -36,7 +36,7 @@ func newRecordClient(cmd *cobra.Command) (record.Client, string, error) {
 }
 
 func recordFlags(c *cobra.Command) {
-	c.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL)")
+	c.Flags().String("server-url", "", "flmnt server URL (default: login config / FLMNT_SERVER_URL)")
 	c.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 }
 

@@ -29,6 +29,7 @@ func runLogout(t *testing.T, args ...string) (string, error) {
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	var out bytes.Buffer
 	rootCmd.SetOut(&out)

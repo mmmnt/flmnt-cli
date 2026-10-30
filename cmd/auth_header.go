@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +30,7 @@ var authHeaderCmd = &cobra.Command{
 func runAuthHeader(cmd *cobra.Command, args []string) error {
 	serverURL := resolveAuthServerURL(cmd)
 	if serverURL == "" {
-		return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or flmnt setup must provide a server URL")
+		return fmt.Errorf("--server-url, FLMNT_SERVER_URL, or flmnt setup must provide a server URL")
 	}
 	tokenURL, clientID, err := resolveOAuthEndpoint(cmd, serverURL)
 	if err != nil {
@@ -62,7 +63,7 @@ func runAuthHeader(cmd *cobra.Command, args []string) error {
 }
 
 // resolveAuthServerURL is the upstream every command talks to: an explicit --server-url, then
-// QUORUM_SERVER_URL, then THE LOGIN. The CLI holds one login at a time and records which server it
+// FLMNT_SERVER_URL, then THE LOGIN. The CLI holds one login at a time and records which server it
 // was made against, so a logged-in person never has to say where a command goes: `flmnt login`
 // points everything at the hosted MCP, `flmnt login --local` at the loopback server. A repo's own
 // .flmnt.json answers only when nothing is logged in — it used to outrank the login, which is how
@@ -71,7 +72,7 @@ func resolveAuthServerURL(cmd *cobra.Command) string {
 	if v, _ := cmd.Flags().GetString("server-url"); v != "" {
 		return v
 	}
-	if v := envOr("QUORUM_SERVER_URL", ""); v != "" {
+	if v := env.Get("SERVER_URL"); v != "" {
 		return v
 	}
 	if cfg, err := authHeaderLoadConfig(); err == nil && cfg.Session() && cfg.ServerURL != "" {
@@ -96,11 +97,11 @@ func resolveActiveWorkspace(cmd *cobra.Command) string {
 func resolveOAuthEndpoint(cmd *cobra.Command, serverURL string) (tokenURL, clientID string, err error) {
 	tokenURL, _ = cmd.Flags().GetString("token-url")
 	if tokenURL == "" {
-		tokenURL = envOr("QUORUM_TOKEN_URL", "")
+		tokenURL = env.Get("TOKEN_URL")
 	}
 	clientID, _ = cmd.Flags().GetString("client-id")
 	if clientID == "" {
-		clientID = envOr("QUORUM_CLIENT_ID", "")
+		clientID = env.Get("CLIENT_ID")
 	}
 	if tokenURL == "" || clientID == "" {
 		if cfg, cerr := authHeaderLoadConfig(); cerr == nil {
@@ -120,7 +121,7 @@ func resolveOAuthEndpoint(cmd *cobra.Command, serverURL string) (tokenURL, clien
 		tokenURL = te
 	}
 	if clientID == "" {
-		return "", "", fmt.Errorf("client id required (--client-id, QUORUM_CLIENT_ID, or `flmnt login`)")
+		return "", "", fmt.Errorf("client id required (--client-id, FLMNT_CLIENT_ID, or `flmnt login`)")
 	}
 	return tokenURL, clientID, nil
 }

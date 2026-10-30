@@ -7,7 +7,8 @@ import (
 )
 
 func TestDashboardPrefersAnExplicitURL(t *testing.T) {
-	t.Setenv("QUORUM_DASHBOARD_URL", "http://custom.example.com")
+	t.Setenv("QUORUM_DASHBOARD_URL", "")
+	t.Setenv("FLMNT_DASHBOARD_URL", "http://custom.example.com")
 
 	if url := browser.DashboardURL("https://mcp.production.flmnt.ai"); url != "http://custom.example.com" {
 		t.Errorf("an explicit override must win; got %s", url)
@@ -15,6 +16,7 @@ func TestDashboardPrefersAnExplicitURL(t *testing.T) {
 }
 
 func TestDashboardFallsBackToTheLocalStackWhenNothingSaysOtherwise(t *testing.T) {
+	t.Setenv("FLMNT_DASHBOARD_URL", "")
 	t.Setenv("QUORUM_DASHBOARD_URL", "")
 
 	if url := browser.DashboardURL(""); url != "http://localhost:3001" {

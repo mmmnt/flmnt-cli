@@ -23,6 +23,7 @@ func TestServerURLFallsBackToTheLoginAlreadyRecorded(t *testing.T) {
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
 		return auth.CLIConfig{ServerURL: "https://mcp.production.flmnt.ai/mcp"}, nil
 	}
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	t.Chdir(t.TempDir())
 	c := &cobra.Command{}
@@ -45,6 +46,7 @@ func TestTheRecordedLoginOutranksTheRepo(t *testing.T) {
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
 		return auth.CLIConfig{Login: auth.LoginLocal, ServerURL: "http://localhost:8000"}, nil
 	}
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	dir := t.TempDir()
 	cfg := `{"server_url":"https://mcp.production.flmnt.ai","project_id":"ws-1"}`
@@ -65,6 +67,7 @@ func TestTheRepoAnswersWhenNothingIsLoggedIn(t *testing.T) {
 	orig := authHeaderLoadConfig
 	defer func() { authHeaderLoadConfig = orig }()
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	dir := t.TempDir()
 	cfg := `{"server_url":"https://mcp.production.flmnt.ai","project_id":"ws-1"}`
@@ -92,6 +95,7 @@ func TestSyncsRemoteURLAlsoFallsBackToTheRecordedLogin(t *testing.T) {
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) {
 		return auth.CLIConfig{ServerURL: "https://mcp.production.flmnt.ai/mcp"}, nil
 	}
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	t.Chdir(t.TempDir())
 	c := &cobra.Command{}

@@ -28,6 +28,7 @@ func TestSyncCommandsAreRegisteredWithExpectedFlags(t *testing.T) {
 }
 
 func TestResolveRemoteServerURLFallsBackToLoginConfig(t *testing.T) {
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	orig := authHeaderLoadConfig
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) {

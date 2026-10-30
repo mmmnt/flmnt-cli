@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
@@ -18,7 +19,7 @@ var whoamiCmd = &cobra.Command{
 		"time and answers by its kind: after `flmnt login --local` the local identity, after `flmnt login`\n" +
 		"the stored OAuth login — never by which credential happens to exist, so the local identity a\n" +
 		"hosted login keeps is not what answers. Without a login, a loopback server (--server-url\n" +
-		"or QUORUM_SERVER_URL) reads as local and anything else as hosted.\n" +
+		"or FLMNT_SERVER_URL) reads as local and anything else as hosted.\n" +
 		"--json prints one object {sub,workspace,client_id?} for a headers-helper that\n" +
 		"mints a local credential as that person; --client <tool> adds the client id derived for that\n" +
 		"tool. Not logged in: nothing on stdout, the reason on stderr, exit 1.",
@@ -120,7 +121,7 @@ func runWhoamiJSON(cmd *cobra.Command, cfg auth.CLIConfig, kind, serverURL strin
 		}
 		out["sub"] = claims.Sub
 		if tool != "" {
-			out["client_id"] = firstNonEmpty(envOr("QUORUM_CLIENT_ID", ""), cfg.ClientID)
+			out["client_id"] = firstNonEmpty(env.Get("CLIENT_ID"), cfg.ClientID)
 		}
 	}
 	out["workspace"] = cfg.ActiveWorkspaceID

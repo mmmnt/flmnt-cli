@@ -35,7 +35,9 @@ func isolateHookEnv(t *testing.T) {
 	t.Cleanup(func() { authHeaderLoadConfig, authHeaderLoadToken = origCfg, origTok })
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
 	authHeaderLoadToken = func(string) (auth.TokenSet, error) { return auth.TokenSet{}, errors.New("no token") }
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
+	t.Setenv("FLMNT_PROJECT_ID", "")
 	t.Setenv("QUORUM_PROJECT_ID", "")
 	t.Setenv("FILAMENT_GRAPHQL_ENDPOINT", "")
 	t.Chdir(t.TempDir())

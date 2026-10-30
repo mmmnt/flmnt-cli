@@ -83,7 +83,7 @@ who this machine is (the derived `local_` sub); `flmnt login --local` records it
 ever after, a hosted login keeps it (a person signed in to the cloud still pushes and links their
 local records as it), and no logout removes it. `whoami` answers by the session's kind, never by which
 credential happens to exist. Every command takes its upstream from the session, so a logged-in person
-never passes `--server-url`; the chain is `--server-url` / `QUORUM_SERVER_URL` / **the login** /
+never passes `--server-url`; the chain is `--server-url` / `FLMNT_SERVER_URL` / **the login** /
 `.flmnt.json` (the repo answers only when nothing is logged in). A loopback host —
 `http://localhost:8000/mcp` — is local, anything else is hosted. The hosted path is unchanged:
 credentials come from the keychain `flmnt login` filled.
@@ -116,7 +116,7 @@ connection on a teammate's harness, or for a fresh start — and keeps the old s
 history, which `whoami` shows (`formerly local_…`) and which the link request will carry, so nobody
 is ever asked which UUID was theirs. A machine with no readable marker is refused; nothing is
 generated at random and nothing is reused from the hosted login. `login --local` takes the loopback
-server from `--server-url` / `QUORUM_SERVER_URL` when one is named (a hosted URL is refused), else
+server from `--server-url` / `FLMNT_SERVER_URL` when one is named (a hosted URL is refused), else
 `http://localhost:8000`, and records it as the session's server. `whoami --json` prints one object
 `{"sub","workspace","client_id"?}`: from the local login when that is the session, from the stored
 OAuth login when a hosted one is (`client_id` is then the registered OAuth client); `client_id` only
@@ -218,6 +218,22 @@ all of this in `.flmnt.json`:
 Step 3 is the fallback of last resort, not the norm. A repo that reaches it has no identity of its
 own, so a per-machine setting decides where its memory goes — which is why `setup` now refuses to
 configure a repo without naming a workspace.
+
+### Environment variables
+
+| Variable | What it sets |
+|---|---|
+| `FLMNT_SERVER_URL` | the flmnt server every command talks to, after `--server-url` and before the login |
+| `FLMNT_PROJECT_ID` | the workspace `gate` and the PreCompact nudge use when nothing else names one |
+| `FLMNT_CLIENT_ID` | the OAuth client id, after `--client-id` |
+| `FLMNT_TOKEN_URL` | the OAuth token endpoint, after `--token-url` |
+| `FLMNT_DEVICE_URL` | the device-authorization endpoint `flmnt login` uses |
+| `FLMNT_DASHBOARD_URL` | the dashboard `flmnt dashboard` opens |
+| `FLMNT_PROXY_PORT` | adds the older host-port proxy probe to `flmnt health` |
+
+Each was named `QUORUM_*` before the product was flmnt (`QUORUM_SERVER_URL` and so on). The former name is
+still read when the `FLMNT_*` one is unset, so an existing script keeps working; when both are set,
+`FLMNT_*` wins.
 
 ## Commands
 

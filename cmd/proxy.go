@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/proxy"
 	"github.com/mmmnt/flmnt-cli/internal/setup"
 	"github.com/spf13/cobra"
@@ -17,7 +18,7 @@ and injects Authorization: Bearer headers on outbound MCP requests.
 .mcp.json should point to http://localhost:PROXY_PORT/mcp.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		port, _ := cmd.Flags().GetInt("port")
-		serverURL := envOr("QUORUM_SERVER_URL", "")
+		serverURL := env.Get("SERVER_URL")
 		if serverURL == "" {
 			serverURL, _ = cmd.Flags().GetString("server-url")
 		}
@@ -27,7 +28,7 @@ and injects Authorization: Bearer headers on outbound MCP requests.
 			}
 		}
 		if serverURL == "" {
-			return fmt.Errorf("--server-url, QUORUM_SERVER_URL, or flmnt setup must provide a server URL")
+			return fmt.Errorf("--server-url, FLMNT_SERVER_URL, or flmnt setup must provide a server URL")
 		}
 
 		addr := proxy.ListenAddr(port)

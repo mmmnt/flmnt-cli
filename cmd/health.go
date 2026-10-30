@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/health"
 	"github.com/mmmnt/flmnt-cli/internal/httpx"
 	"github.com/spf13/cobra"
@@ -17,7 +18,7 @@ var healthCmd = &cobra.Command{
 	Short: "Check the health of the flmnt server this session talks to",
 	Long: "Probes /health on the configured server — the local harness when the server URL is loopback,\n" +
 		"the hosted MCP otherwise — and says which environment that is. CORE_URL, ENGINE_URL and\n" +
-		"QUORUM_PROXY_PORT add probes for the older host-port local stack only when they are set. On a\n" +
+		"FLMNT_PROXY_PORT add probes for the older host-port local stack only when they are set. On a\n" +
 		"local server the stored local token is reported too: who it is for, or that there is none.",
 	Run: func(cmd *cobra.Command, args []string) {
 		serverURL := resolveAuthServerURL(cmd)
@@ -26,7 +27,7 @@ var healthCmd = &cobra.Command{
 			CoreURL:   os.Getenv("CORE_URL"),
 			EngineURL: os.Getenv("ENGINE_URL"),
 		}
-		if port := os.Getenv("QUORUM_PROXY_PORT"); port != "" {
+		if port := env.Get("PROXY_PORT"); port != "" {
 			cfg.ProxyURL = "http://localhost:" + port
 		}
 		results := health.Check(cfg)
@@ -45,7 +46,7 @@ var healthCmd = &cobra.Command{
 func HealthEnvironmentLine(serverURL string) string {
 	switch {
 	case serverURL == "":
-		return "environment  unresolved — no server URL (flmnt login, QUORUM_SERVER_URL, --server-url or flmnt setup)"
+		return "environment  unresolved — no server URL (flmnt login, FLMNT_SERVER_URL, --server-url or flmnt setup)"
 	case httpx.IsLoopback(serverURL):
 		return fmt.Sprintf("environment  local (%s)", serverURL)
 	default:
@@ -100,6 +101,6 @@ func envOr(key, fallback string) string {
 }
 
 func init() {
-	healthCmd.Flags().String("server-url", "", "flmnt server URL (default: QUORUM_SERVER_URL / this repo's config / login config)")
+	healthCmd.Flags().String("server-url", "", "flmnt server URL (default: FLMNT_SERVER_URL / this repo's config / login config)")
 	rootCmd.AddCommand(healthCmd)
 }

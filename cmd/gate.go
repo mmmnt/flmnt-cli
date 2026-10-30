@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/gate"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +30,7 @@ func runGate(cmd *cobra.Command, args []string) error {
 	cwd, _ := os.Getwd()
 	project := resolveProject(cmd, cwd)
 	if project == "" {
-		project = envOr("QUORUM_PROJECT_ID", "")
+		project = env.Get("PROJECT_ID")
 	}
 	if project == "" {
 		return nil
@@ -71,7 +72,7 @@ func hookSessionID(in io.Reader) string {
 }
 
 func init() {
-	gateCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL)")
+	gateCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / FLMNT_SERVER_URL)")
 	gateCmd.Flags().Duration("threshold", 1800*time.Second, "Keyframe age threshold (default 30m)")
 	gateCmd.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 	rootCmd.AddCommand(gateCmd)

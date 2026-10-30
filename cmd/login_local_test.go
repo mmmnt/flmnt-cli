@@ -14,6 +14,7 @@ import (
 // the keychain and the local login, and a test must never reach the real ones.
 func runLogin(t *testing.T, args ...string) (stdout string, err error) {
 	t.Helper()
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	stdout, _, err = runLoginArgs(t, args...)
 	return stdout, err

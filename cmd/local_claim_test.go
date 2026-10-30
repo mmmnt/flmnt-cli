@@ -61,6 +61,7 @@ func runLocalClaim(t *testing.T, stdin string, args ...string) (stdout string, e
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
 	})
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	var out, errb bytes.Buffer
 	rootCmd.SetOut(&out)

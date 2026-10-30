@@ -193,7 +193,7 @@ func valueOrAbsent(v json.RawMessage) string {
 }
 
 // resolveRemoteServerURL is the hosted MCP URL: --remote-url first, then the chain every other
-// command shares (--server-url / QUORUM_SERVER_URL / this repo's config / the login config that
+// command shares (--server-url / FLMNT_SERVER_URL / this repo's config / the login config that
 // `flmnt login` writes). sync used to repeat that last fallback itself; once the shared chain
 // consults the login config, a second identical lookup can only return the same empty string.
 func resolveRemoteServerURL(cmd *cobra.Command) string {
@@ -296,7 +296,7 @@ func mintLocalBearer(cmd *cobra.Command, url string) (string, error) {
 func init() {
 	for _, c := range []*cobra.Command{syncPushCmd, syncPullCmd} {
 		c.Flags().Bool("dry-run", false, "Show what would be moved without writing to the target")
-		c.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL); --remote-url wins over it")
+		c.Flags().String("server-url", "", "flmnt server URL (default: login config / FLMNT_SERVER_URL); --remote-url wins over it")
 		c.Flags().String("remote-url", "", "Remote MCP server URL (default: active login)")
 		c.Flags().String("remote-workspace", "", "Remote workspace id (default: active workspace)")
 		c.Flags().String("local-url", defaultLocalURL, "Local MCP server URL")

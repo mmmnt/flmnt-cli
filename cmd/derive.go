@@ -195,7 +195,7 @@ func runHook(cmd *cobra.Command) error {
 	return nil // a hook never fails a session
 }
 
-// buildWriter resolves the write endpoint (like `sync`: --server-url / QUORUM_SERVER_URL / login
+// buildWriter resolves the write endpoint (like `sync`: --server-url / FLMNT_SERVER_URL / login
 // config; prod by default, localhost for devs) and project (--project, else this repo's own
 // project_id, else the active workspace), and
 // builds the authenticated router GraphQL client — writes go through memoryImport, never core directly.
@@ -205,7 +205,7 @@ func buildWriter(cmd *cobra.Command, repoDir string) (*derive.Writer, error) {
 
 	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
-		return nil, fmt.Errorf("no server URL: run `flmnt login`, set QUORUM_SERVER_URL, or pass --server-url (e.g. http://localhost:3000 for a local stack)")
+		return nil, fmt.Errorf("no server URL: run `flmnt login`, set FLMNT_SERVER_URL, or pass --server-url (e.g. http://localhost:3000 for a local stack)")
 	}
 	project := resolveProject(cmd, repoDir)
 	if project == "" {
@@ -235,7 +235,7 @@ func init() {
 	deriveCmd.Flags().String("repo", "", "Repo path to derive from (default: current directory)")
 	deriveCmd.Flags().String("out", "", "Write candidate JSONL to this path (one SessionDerivation per line)")
 	deriveCmd.Flags().Bool("write", false, "Write derived candidates to flmnt through the router GraphQL (memoryImport)")
-	deriveCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL; pass http://localhost:3000 for a local stack)")
+	deriveCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / FLMNT_SERVER_URL; pass http://localhost:3000 for a local stack)")
 	deriveCmd.Flags().String("project", "", "workspace name or id — overrides this repo's own setting (`flmnt setup --project`), which is used before the active workspace")
 	deriveCmd.Flags().String("session", "", "Restrict to one main session (id prefix)")
 	deriveCmd.Flags().Bool("writer-dry-run", false, "With --write: print the import payload instead of sending it")

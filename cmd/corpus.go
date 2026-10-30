@@ -37,7 +37,7 @@ func runCorpus(cmd *cobra.Command, args []string) error {
 func renderCorpus(cmd *cobra.Command) error {
 	serverURL := resolveRemoteServerURL(cmd)
 	if serverURL == "" {
-		return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
+		return fmt.Errorf("--server-url or FLMNT_SERVER_URL is required")
 	}
 	cwd, _ := os.Getwd()
 	project := resolveProject(cmd, cwd)
@@ -100,7 +100,7 @@ func corpusSummary(dir string, r corpus.Report, stray []string) string {
 }
 
 func init() {
-	corpusCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL)")
+	corpusCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / FLMNT_SERVER_URL)")
 	corpusCmd.Flags().String("project", "", "workspace name or id whose doctrine stream to render (default: this repo's own setting)")
 	corpusCmd.Flags().String("out", "training", "directory to write the documents into")
 	corpusCmd.Flags().Bool("hook", false, "SessionStart mode: refresh silently and never fail a session start")

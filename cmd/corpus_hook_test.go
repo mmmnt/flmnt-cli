@@ -27,6 +27,7 @@ func TestCorpusUnderHookFailsQuiet(t *testing.T) {
 	orig := authHeaderLoadConfig
 	defer func() { authHeaderLoadConfig = orig }()
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	t.Chdir(t.TempDir())
 
@@ -44,6 +45,7 @@ func TestCorpusRunByHandReportsWhyItCannotRender(t *testing.T) {
 	orig := authHeaderLoadConfig
 	defer func() { authHeaderLoadConfig = orig }()
 	authHeaderLoadConfig = func() (auth.CLIConfig, error) { return auth.CLIConfig{}, nil }
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	t.Chdir(t.TempDir())
 

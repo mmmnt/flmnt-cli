@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,7 @@ var logoutCmd = &cobra.Command{
 			return runLocalLogout(cmd)
 		}
 		cfg, _ := logoutLoadConfig()
-		serverURL := firstNonEmpty(flagString(cmd, "server-url"), envOr("QUORUM_SERVER_URL", ""), cfg.ServerURL)
+		serverURL := firstNonEmpty(flagString(cmd, "server-url"), env.Get("SERVER_URL"), cfg.ServerURL)
 		revokeURL := firstNonEmpty(flagString(cmd, "revoke-url"), cfg.RevocationEndpoint)
 		clientID := firstNonEmpty(flagString(cmd, "client-id"), cfg.ClientID)
 

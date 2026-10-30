@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/auth"
+	"github.com/mmmnt/flmnt-cli/internal/env"
 	"github.com/mmmnt/flmnt-cli/internal/localadmin"
 	"github.com/spf13/cobra"
 )
@@ -32,10 +33,10 @@ var loginCmd = &cobra.Command{
 		}
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		if serverURL == "" {
-			serverURL = envOr("QUORUM_SERVER_URL", "")
+			serverURL = env.Get("SERVER_URL")
 		}
 		if serverURL == "" {
-			return fmt.Errorf("--server-url or QUORUM_SERVER_URL is required")
+			return fmt.Errorf("--server-url or FLMNT_SERVER_URL is required")
 		}
 
 		device, _ := cmd.Flags().GetBool("device")
@@ -43,7 +44,7 @@ var loginCmd = &cobra.Command{
 		flagToken, _ := cmd.Flags().GetString("token-url")
 		flagClient, _ := cmd.Flags().GetString("client-id")
 		flagDevice, _ := cmd.Flags().GetString("device-url")
-		envClient := envOr("QUORUM_CLIENT_ID", "")
+		envClient := env.Get("CLIENT_ID")
 
 		cfg, _ := loginLoadConfig()
 		// Always re-discover: the server's advertised authorization server is authoritative, so a moved
@@ -53,7 +54,7 @@ var loginCmd = &cobra.Command{
 		// minting tokens the resource server rejects ("login doesn't stick").
 		doc, _ := loginDiscover(serverURL)
 		authURL, tokenURL, clientID := resolveLoginEndpoints(flagAuth, flagToken, flagClient, envClient, cfg, doc)
-		deviceURL := firstNonEmpty(flagDevice, envOr("QUORUM_DEVICE_URL", ""), doc.DeviceAuthorizationEndpoint)
+		deviceURL := firstNonEmpty(flagDevice, env.Get("DEVICE_URL"), doc.DeviceAuthorizationEndpoint)
 		revocationEndpoint := firstNonEmpty(doc.RevocationEndpoint, cfg.RevocationEndpoint)
 
 		var tokens auth.TokenSet

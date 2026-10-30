@@ -20,8 +20,10 @@ func stubKeychain(t *testing.T, token string, err error) {
 	orig := authHeaderLoadToken
 	authHeaderLoadToken = func(string) (auth.TokenSet, error) { return auth.TokenSet{AccessToken: token}, err }
 	t.Cleanup(func() { authHeaderLoadToken = orig })
-	t.Setenv("QUORUM_TOKEN_URL", "https://oauth.example/token")
-	t.Setenv("QUORUM_CLIENT_ID", "flmnt-cli")
+	t.Setenv("QUORUM_TOKEN_URL", "")
+	t.Setenv("FLMNT_TOKEN_URL", "https://oauth.example/token")
+	t.Setenv("QUORUM_CLIENT_ID", "")
+	t.Setenv("FLMNT_CLIENT_ID", "flmnt-cli")
 }
 
 /*
@@ -79,7 +81,8 @@ func TestResolveProjectFallsBackToTheActiveWorkspaceOnALoopbackServerToo(t *test
 	t.Cleanup(func() { authHeaderLoadConfig = origCfg })
 
 	for _, server := range []string{"http://localhost:8000/mcp", "https://mcp.production.flmnt.ai/mcp"} {
-		t.Setenv("QUORUM_SERVER_URL", server)
+		t.Setenv("QUORUM_SERVER_URL", "")
+		t.Setenv("FLMNT_SERVER_URL", server)
 		if got := resolveProject(briefCmd, t.TempDir()); got != "729c1a1d" {
 			t.Fatalf("%s: got %q, want the active workspace", server, got)
 		}

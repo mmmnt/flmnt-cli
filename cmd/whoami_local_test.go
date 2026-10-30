@@ -179,6 +179,7 @@ func TestWhoamiAnswersFromTheRecordedLocalLoginInARepoPinnedToProduction(t *test
 	}
 	t.Cleanup(func() { authHeaderLoadToken = auth.LoadToken })
 	stubConfig(t, auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL, Sub: localMike.Sub})
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	dir := t.TempDir()
 	if err := os.WriteFile(dir+"/.quorum.json", []byte(`{"server_url":"https://mcp.production.flmnt.ai","project_id":"bc674142","project_name":"quorum"}`), 0o600); err != nil {
@@ -207,6 +208,7 @@ func TestWhoamiSaysNotLoggedInWhenThereIsNoSessionAndNoServer(t *testing.T) {
 	stubIdentity(t, identity.Identity{}, identity.ErrNotFound)
 	stubKeychain(t, "", auth.ErrNotFound)
 	stubConfig(t, auth.CLIConfig{})
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	t.Chdir(t.TempDir())
 
@@ -232,6 +234,7 @@ func TestWhoamiAnswersFromTheHostedSessionWhileTheLocalIdentityIsPresent(t *test
 	}
 	t.Cleanup(func() { authHeaderLoadToken = auth.LoadToken })
 	stubConfig(t, auth.CLIConfig{Login: auth.LoginHosted, ServerURL: "https://mcp.production.flmnt.ai", Sub: "u-123", ClientID: "flmnt-cli"})
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	dir := t.TempDir()
 	if err := os.WriteFile(dir+"/.quorum.json", []byte(`{"server_url":"http://localhost:8000/mcp","project_id":"bc674142","project_name":"quorum"}`), 0o600); err != nil {
@@ -261,6 +264,7 @@ func TestWhoamiNamesTheFormerSubs(t *testing.T) {
 	current := identity.Remint(former, "ABB0B3CF-5122-5F8A-835B-A01323C6EDCD", "mike", time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC))
 	stubIdentity(t, current, nil)
 	stubConfig(t, auth.CLIConfig{Login: auth.LoginLocal, ServerURL: defaultLocalURL, Sub: current.Sub})
+	t.Setenv("FLMNT_SERVER_URL", "")
 	t.Setenv("QUORUM_SERVER_URL", "")
 	t.Chdir(t.TempDir())
 

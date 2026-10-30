@@ -2,10 +2,11 @@ package browser
 
 import (
 	"net/url"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/mmmnt/flmnt-cli/internal/env"
 )
 
 // localDashboard is where the dashboard runs in a local stack — the fallback when the environment
@@ -13,12 +14,12 @@ import (
 const localDashboard = "http://localhost:3001"
 
 // DashboardURL is the dashboard for the environment the caller is signed in to. An explicit
-// QUORUM_DASHBOARD_URL still wins. Otherwise the environment is taken from the server URL the rest of
+// FLMNT_DASHBOARD_URL still wins. Otherwise the environment is taken from the server URL the rest of
 // the CLI already resolves: the MCP host is the dashboard host with an `mcp.` label in front, so
 // dropping that label names the app. Anything else — no login, a local stack, an unfamiliar shape —
 // falls back to the local stack rather than guessing at a host.
 func DashboardURL(serverURL string) string {
-	if v := os.Getenv("QUORUM_DASHBOARD_URL"); v != "" {
+	if v := env.Get("DASHBOARD_URL"); v != "" {
 		return v
 	}
 	u, err := url.Parse(serverURL)

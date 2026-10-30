@@ -8,6 +8,7 @@ import (
 
 func TestLoginPrefersFreshDiscoveryOverStaleConfig(t *testing.T) {
 	stubLoginSeams(t)
+	t.Setenv("FLMNT_CLIENT_ID", "")
 	t.Setenv("QUORUM_CLIENT_ID", "")
 	origPKCE, origStore := loginRunPKCEFlow, loginStoreToken
 	defer func() { loginRunPKCEFlow = origPKCE; loginStoreToken = origStore }()

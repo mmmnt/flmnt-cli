@@ -22,6 +22,6 @@ var dashboardCmd = &cobra.Command{
 }
 
 func init() {
-	dashboardCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / QUORUM_SERVER_URL)")
+	dashboardCmd.Flags().String("server-url", "", "flmnt server URL (default: login config / FLMNT_SERVER_URL)")
 	rootCmd.AddCommand(dashboardCmd)
 }

@@ -30,5 +30,5 @@ func notConnectedLine(err error) string {
 	if httpx.IsLoopback(target) {
 		return fmt.Sprintf("FLMNT_NOT_CONNECTED: no flmnt answered on this machine (%s); start it with `flmnt local up`", target)
 	}
-	return fmt.Sprintf("FLMNT_NOT_CONNECTED: no flmnt answered at %s; check the server URL (--server-url, QUORUM_SERVER_URL or `flmnt login`) and your connection", target)
+	return fmt.Sprintf("FLMNT_NOT_CONNECTED: no flmnt answered at %s; check the server URL (--server-url, FLMNT_SERVER_URL or `flmnt login`) and your connection", target)
 }
