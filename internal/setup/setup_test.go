@@ -663,3 +663,138 @@ func TestPrecompactHookWithoutAProjectPointsAtTheStreamTheSessionStartHookNamed(
 		t.Fatalf("got %q", out)
 	}
 }
+
+func hookCommands(t *testing.T, dir, event string) []string {
+	t.Helper()
+	hooks, _ := readSettings(t, dir)["hooks"].(map[string]any)
+	var out []string
+	groups, _ := hooks[event].([]any)
+	for _, g := range groups {
+		entries, _ := g.(map[string]any)["hooks"].([]any)
+		for _, e := range entries {
+			out = append(out, e.(map[string]any)["command"].(string))
+		}
+	}
+	return out
+}
+
+func count(list []string, want string) int {
+	n := 0
+	for _, s := range list {
+		if s == want {
+			n++
+		}
+	}
+	return n
+}
+
+func seedSettings(t *testing.T, dir, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".claude", "settings.local.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunInstallsSessionStartOnSessionStartAndGateOnUserPromptSubmit(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{ServerURL: "u", ProjectID: "p", Dir: dir, SessionStartCmd: "/bin/flmnt session-start", GateCmd: "/bin/flmnt gate"}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := hookCommands(t, dir, "SessionStart"); count(got, "/bin/flmnt session-start") != 1 {
+		t.Fatalf("SessionStart = %v", got)
+	}
+	if got := hookCommands(t, dir, "UserPromptSubmit"); count(got, "/bin/flmnt gate") != 1 {
+		t.Fatalf("UserPromptSubmit = %v", got)
+	}
+}
+
+func TestTheSessionStartHookDefaultsToTheBareCommand(t *testing.T) {
+	first := buildHooks(Config{})["SessionStart"][0].Hooks[0].Command
+	if first != "flmnt session-start" {
+		t.Fatalf("SessionStart opens with %q", first)
+	}
+}
+
+func TestRunKeepsHooksItDoesNotOwn(t *testing.T) {
+	dir := t.TempDir()
+	seedSettings(t, dir, `{"hooks":{
+		"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/scripts/mine.sh\"","timeout":5}]}],
+		"Notification":[{"matcher":"","hooks":[{"type":"command","command":"say done"}]}]}}`)
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	if got := hookCommands(t, dir, "UserPromptSubmit"); count(got, `"$CLAUDE_PROJECT_DIR/scripts/mine.sh"`) != 1 || count(got, "flmnt gate") != 1 {
+		t.Fatalf("UserPromptSubmit = %v", got)
+	}
+	if got := hookCommands(t, dir, "Notification"); count(got, "say done") != 1 {
+		t.Fatalf("Notification = %v", got)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	if !strings.Contains(string(b), `"timeout": 5`) {
+		t.Fatalf("a kept hook loses its other fields: %s", b)
+	}
+}
+
+func TestRunTwiceWritesTheSameSettings(t *testing.T) {
+	dir := t.TempDir()
+	seedSettings(t, dir, `{"hooks":{"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"mine.sh"}]}]}}`)
+	cfg := Config{ServerURL: "u", ProjectID: "p", Dir: dir, SessionStartCmd: "/bin/flmnt session-start", GateCmd: "/bin/flmnt gate"}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	if string(first) != string(second) {
+		t.Fatalf("second run changed settings:\n%s\n---\n%s", first, second)
+	}
+}
+
+func TestRunReplacesTheKitHooksAnEarlierRunWroteFromAnotherBinaryPath(t *testing.T) {
+	dir := t.TempDir()
+	seedSettings(t, dir, `{"hooks":{
+		"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"/old/bin/flmnt brief"},{"type":"command","command":"/old/bin/flmnt session-start"}]}],
+		"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"/old/bin/flmnt gate"},{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/flmnt-hooks/plan-detection.sh\""}]}]}}`)
+	cfg := Config{ServerURL: "u", ProjectID: "p", Dir: dir, SessionStartCmd: "/new/bin/flmnt session-start", GateCmd: "/new/bin/flmnt gate", BriefCmd: "/new/bin/flmnt brief"}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	ss := hookCommands(t, dir, "SessionStart")
+	ups := hookCommands(t, dir, "UserPromptSubmit")
+	if count(ss, "/old/bin/flmnt session-start") != 0 || count(ss, "/old/bin/flmnt brief") != 0 || count(ss, "/new/bin/flmnt session-start") != 1 {
+		t.Fatalf("SessionStart = %v", ss)
+	}
+	if count(ups, "/old/bin/flmnt gate") != 0 || count(ups, `"$CLAUDE_PROJECT_DIR/.claude/flmnt-hooks/plan-detection.sh"`) != 1 {
+		t.Fatalf("UserPromptSubmit = %v", ups)
+	}
+}
+
+func TestRunRefusesSettingsWhoseHooksAreNotAHookMapAndWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	seed := `{"hooks":{"UserPromptSubmit":"mine.sh"}}`
+	seedSettings(t, dir, seed)
+	err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir})
+	if err == nil || !strings.Contains(err.Error(), "settings.local.json") || !strings.Contains(err.Error(), "UserPromptSubmit") {
+		t.Fatalf("Run error = %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json")); string(b) != seed {
+		t.Fatalf("settings.local.json rewritten: %s", b)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".flmnt.json")); statErr == nil {
+		t.Fatal(".flmnt.json written after refused settings")
+	}
+}
+
+func TestCheckConfigsRefusesSettingsWhoseHooksAreNotAHookMap(t *testing.T) {
+	dir := t.TempDir()
+	seedSettings(t, dir, `{"hooks":{"SessionStart":[{"matcher":"","hooks":"flmnt brief"}]}}`)
+	if err := CheckConfigs(dir); err == nil || !strings.Contains(err.Error(), "hooks.SessionStart") {
+		t.Fatalf("CheckConfigs error = %v", err)
+	}
+}

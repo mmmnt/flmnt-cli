@@ -12,10 +12,12 @@ import (
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Configure Claude Code integration",
-	Long: `Installs the flmnt automation kit: a direct flmnt entry in .mcp.json (use --proxy for the
-local-proxy entry instead), the full lifecycle hook map + flmnt MCP tool permissions in
-.claude/settings.local.json, the slash-command catalog in .claude/commands/, and the nudge/gate
-scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempotent — safe to re-run.`,
+	Long: "Installs the flmnt automation kit: a direct flmnt entry in .mcp.json (use --proxy for the\n" +
+		"local-proxy entry instead), the full lifecycle hook map + flmnt MCP tool permissions in\n" +
+		".claude/settings.local.json, the slash-command catalog in .claude/commands/, and the nudge/gate\n" +
+		"scripts in .claude/flmnt-hooks/. SessionStart runs `flmnt session-start`, which makes sure the\n" +
+		"session's keyframe stream exists and names it; UserPromptSubmit runs `flmnt gate`. Hooks and\n" +
+		".mcp.json servers setup did not write are kept. Idempotent — safe to re-run.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serverURL, _ := cmd.Flags().GetString("server-url")
 		proxyPort, _ := cmd.Flags().GetInt("proxy-port")
@@ -51,15 +53,16 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 		}
 
 		cfg := setup.Config{
-			ServerURL:     serverURL,
-			ProjectID:     projectID,
-			ProjectName:   projectName,
-			CorpusProject: corpusProject,
-			ProxyPort:     proxyPort,
-			Proxy:         proxy,
-			GateCmd:       flmntCmd + " gate",
-			BriefCmd:      flmntCmd + " brief",
-			DeriveCmd:     flmntCmd + " derive --hook",
+			ServerURL:       serverURL,
+			ProjectID:       projectID,
+			ProjectName:     projectName,
+			CorpusProject:   corpusProject,
+			ProxyPort:       proxyPort,
+			Proxy:           proxy,
+			GateCmd:         flmntCmd + " gate",
+			SessionStartCmd: flmntCmd + " session-start",
+			BriefCmd:        flmntCmd + " brief",
+			DeriveCmd:       flmntCmd + " derive --hook",
 		}
 
 		if err := setup.Run(cfg); err != nil {
@@ -74,7 +77,8 @@ scripts in .claude/flmnt-hooks/. Other .mcp.json servers are preserved. Idempote
 		} else {
 			fmt.Fprintf(out, "  .mcp.json              → flmnt (direct, OAuth on first /mcp; other servers preserved)\n")
 		}
-		fmt.Fprintf(out, "  hooks (settings.local) → SessionStart·UserPromptSubmit·PreToolUse·PostToolUse·PreCompact·SubagentStop·Stop·SessionEnd\n")
+		fmt.Fprintf(out, "  hooks (settings.local) → SessionStart·UserPromptSubmit·PreToolUse·PostToolUse·PreCompact·SubagentStop·Stop·SessionEnd (other hooks kept)\n")
+		fmt.Fprintf(out, "  session keyframe       → SessionStart runs `flmnt session-start`, UserPromptSubmit runs `flmnt gate`\n")
 		fmt.Fprintf(out, "  .claude/commands/      → %d /flmnt-* slash commands\n", setup.CommandCount())
 		fmt.Fprintf(out, "  .claude/flmnt-hooks/   → nudge + causal-ref-gate scripts\n")
 		fmt.Fprintf(out, "  permissions            → flmnt MCP tools granted\n")

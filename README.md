@@ -63,10 +63,11 @@ stream, and `flmnt brief` opens sessions with the wrong project's state.
 Once set, the repo is pinned: every hook targets that workspace regardless of what the CLI is
 pointed at elsewhere. Setup prints which workspace it chose.
 
-`flmnt setup` writes a project-local `.mcp.json` pointing at the local proxy plus a
-`.claude/settings.local.json` UserPromptSubmit hook, then `flmnt proxy` injects your
-bearer token on outbound MCP requests — so Claude Code talks to a live, authenticated
-flmnt MCP without you handling tokens by hand. `setup` is idempotent.
+`flmnt setup` writes a project-local `.mcp.json` entry for the flmnt MCP plus the hook map in
+`.claude/settings.local.json`. Its SessionStart hook, `flmnt session-start`, makes sure the session's
+keyframe stream `{project}::{session_id}::keyframe` exists and tells the agent that stream_id, so no
+CLAUDE.md or AGENTS.md text is needed for it; its UserPromptSubmit hook, `flmnt gate`, reads the same
+stream. Hooks setup did not write stay as they were, and `setup` is idempotent.
 
 `flmnt workspace use <name|id>` sets the ACTIVE workspace, which is a per-machine convenience
 for ad-hoc commands — it does not decide where a configured repo records.

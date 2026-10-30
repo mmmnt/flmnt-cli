@@ -20,10 +20,12 @@ type Config struct {
 	CorpusProject string
 	ProxyPort     int
 	GateCmd       string // UserPromptSubmit: context-recency nudge (default: "flmnt gate")
-	BriefCmd      string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
-	DeriveCmd     string // Stop: derive + import the finished session (default: "flmnt derive --hook")
-	Dir           string // project root; defaults to cwd
-	Proxy         bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
+	// SessionStartCmd makes sure the session's keyframe stream exists and names it (default: "flmnt session-start").
+	SessionStartCmd string
+	BriefCmd        string // SessionStart: inject the project's reasoning state (default: "flmnt brief")
+	DeriveCmd       string // Stop: derive + import the finished session (default: "flmnt derive --hook")
+	Dir             string // project root; defaults to cwd
+	Proxy           bool   // when true, wire the local-proxy entry instead of the direct OAuth entry
 }
 
 // ProjectConfigFile is the checkout's flmnt configuration. LegacyProjectConfigFile is the name it had
@@ -103,7 +105,13 @@ func CheckConfigs(dir string) error {
 	if err := readJSONFile(filepath.Join(dir, ".mcp.json"), &map[string]json.RawMessage{}); err != nil {
 		return err
 	}
-	return readJSONFile(filepath.Join(dir, ".claude", "settings.local.json"), &map[string]any{})
+	settingsPath := filepath.Join(dir, ".claude", "settings.local.json")
+	settings := map[string]any{}
+	if err := readJSONFile(settingsPath, &settings); err != nil {
+		return err
+	}
+	_, err := mergeHooks(settingsPath, settings["hooks"], Config{})
+	return err
 }
 
 func Run(cfg Config) error {
@@ -125,9 +133,18 @@ func Run(cfg Config) error {
 		return err
 	}
 	settings := map[string]any{}
-	if err := readJSONFile(filepath.Join(dir, ".claude", "settings.local.json"), &settings); err != nil {
+	settingsPath := filepath.Join(dir, ".claude", "settings.local.json")
+	if err := readJSONFile(settingsPath, &settings); err != nil {
 		return err
 	}
+	if settings == nil {
+		settings = map[string]any{}
+	}
+	hooks, err := mergeHooks(settingsPath, settings["hooks"], cfg)
+	if err != nil {
+		return err
+	}
+	settings["hooks"] = hooks
 	if err := writeProjectConfig(dir, cfg, project); err != nil {
 		return fmt.Errorf("writing %s: %w", ProjectConfigFile, err)
 	}
@@ -375,7 +392,7 @@ func buildHooks(cfg Config) map[string][]hookMatcher {
 	cmd := func(c string) hookEntry { return hookEntry{Type: "command", Command: c} }
 	// The corpus refresh is wired only for a repo that HAS a corpus. Wiring it everywhere would add a
 	// round-trip to every session start that can only ever render nothing.
-	sessionStart := []hookEntry{cmd(brief), cmd("flmnt health || true")}
+	sessionStart := []hookEntry{cmd(orDefault(cfg.SessionStartCmd, "flmnt session-start")), cmd(brief), cmd("flmnt health || true")}
 	if cfg.CorpusProject != "" {
 		sessionStart = append(sessionStart, cmd("flmnt corpus --hook --project "+cfg.CorpusProject))
 	}
@@ -395,6 +412,116 @@ func buildHooks(cfg Config) map[string][]hookMatcher {
 		"Stop":         {{Matcher: "", Hooks: []hookEntry{cmd(derive)}}},
 		"SessionEnd":   {{Matcher: "", Hooks: []hookEntry{cmd("flmnt derive --write || true"), cmd("flmnt sync push || true")}}},
 	}
+}
+
+// hookEvents is the order the kit's events are written in, so a rewrite is byte-identical.
+var hookEvents = []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "SubagentStop", "Stop", "SessionEnd"}
+
+// mergeHooks is the settings' hook map with the kit's hooks in place of the ones an earlier setup wrote,
+// and every other hook kept as it was. A hook is the kit's when it runs the flmnt CLI, runs one of the
+// kit's scripts in .claude/flmnt-hooks, or is a command this run writes. A hooks value that is not a
+// hook map stops setup, naming the file and the event, before anything is written.
+func mergeHooks(path string, existing any, cfg Config) (map[string]any, error) {
+	kit := buildHooks(cfg)
+	owned := map[string]bool{}
+	for _, groups := range kit {
+		for _, g := range groups {
+			for _, h := range g.Hooks {
+				owned[h.Command] = true
+			}
+		}
+	}
+	isKit := func(command string) bool {
+		return owned[command] || runsFlmnt(command) || strings.Contains(command, hookScriptsRel+"/")
+	}
+
+	out := map[string]any{}
+	var current map[string]any
+	if existing != nil {
+		m, ok := existing.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s: hooks is not an object; fix it and run setup again (nothing was written)", path)
+		}
+		current = m
+	}
+	for _, ev := range hookEvents {
+		var groups []any
+		for _, g := range kit[ev] {
+			groups = append(groups, g)
+		}
+		kept, err := keptGroups(path, ev, current[ev], isKit)
+		if err != nil {
+			return nil, err
+		}
+		out[ev] = append(groups, kept...)
+	}
+	for ev, v := range current {
+		if _, isKitEvent := kit[ev]; isKitEvent {
+			continue
+		}
+		kept, err := keptGroups(path, ev, v, isKit)
+		if err != nil {
+			return nil, err
+		}
+		if len(kept) > 0 {
+			out[ev] = kept
+		}
+	}
+	return out, nil
+}
+
+// keptGroups is an event's matcher groups with the kit's hooks taken out; a group left empty is dropped.
+func keptGroups(path, event string, v any, isKit func(string) bool) ([]any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	bad := fmt.Errorf("%s: hooks.%s is not a list of matcher groups; fix it and run setup again (nothing was written)", path, event)
+	groups, ok := v.([]any)
+	if !ok {
+		return nil, bad
+	}
+	var kept []any
+	for _, g := range groups {
+		group, ok := g.(map[string]any)
+		if !ok {
+			return nil, bad
+		}
+		entries, ok := group["hooks"].([]any)
+		if !ok {
+			return nil, bad
+		}
+		var keep []any
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				return nil, bad
+			}
+			if c, _ := entry["command"].(string); c != "" && isKit(c) {
+				continue
+			}
+			keep = append(keep, entry)
+		}
+		if len(keep) == 0 {
+			continue
+		}
+		copied := map[string]any{}
+		for k, val := range group {
+			copied[k] = val
+		}
+		copied["hooks"] = keep
+		kept = append(kept, copied)
+	}
+	return kept, nil
+}
+
+// runsFlmnt reports a command whose program is the flmnt CLI, wherever it is installed.
+func runsFlmnt(command string) bool {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return false
+	}
+	name := filepath.Base(strings.Trim(fields[0], `"'`))
+	return name == "flmnt" || name == "flmnt.exe"
 }
 
 // mergePermissions unions the kit's tool allow-list into any existing permissions, preserving the
@@ -433,12 +560,11 @@ func writeSettingsLocalJSON(dir string, cfg Config, current map[string]any) erro
 	}
 	path := filepath.Join(claudeDir, "settings.local.json")
 
-	// Start from the existing file (preserve unmanaged keys like enabledMcpjsonServers), then set the
-	// managed sections: the full hook map + the merged permission allow-list.
+	// Start from the existing settings (unmanaged keys like enabledMcpjsonServers kept, the hook map already
+	// merged by Run), then set the merged permission allow-list.
 	if current == nil {
 		current = map[string]any{}
 	}
-	current["hooks"] = buildHooks(cfg)
 	current["permissions"] = mergePermissions(current["permissions"])
 	return writeJSON(path, current)
 }
