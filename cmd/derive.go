@@ -169,14 +169,15 @@ func runWrite(cmd *cobra.Command, proj derive.Project, sessions []string) error 
 }
 
 // runHook is the Stop-hook entry: reads the hook JSON from stdin (transcript_path + cwd), derives
-// that one session, and imports it. Fails QUIET — a hook must never block or noise the session.
+// that one session, and imports it. Never fails the session: when no flmnt answers it says
+// FLMNT_NOT_CONNECTED on stderr; any other failure stays quiet.
 func runHook(cmd *cobra.Command) error {
 	var payload struct {
 		SessionID      string `json:"session_id"`
 		TranscriptPath string `json:"transcript_path"`
 		Cwd            string `json:"cwd"`
 	}
-	if err := json.NewDecoder(os.Stdin).Decode(&payload); err != nil || payload.TranscriptPath == "" {
+	if err := json.NewDecoder(cmd.InOrStdin()).Decode(&payload); err != nil || payload.TranscriptPath == "" {
 		return nil
 	}
 	recs, err := derive.ParseSession(payload.TranscriptPath)
@@ -188,8 +189,10 @@ func runHook(cmd *cobra.Command) error {
 		return nil // not configured (no login/project) — stay quiet
 	}
 	der := derive.DeriveSession(payload.Cwd, recs)
-	_, _ = w.WriteSession(der) // never surface write errors from a hook
-	return nil
+	if _, err := w.WriteSession(der); err != nil {
+		reportNotConnected(cmd.ErrOrStderr(), err) // FLMNT_NOT_CONNECTED when nothing answered; else quiet
+	}
+	return nil // a hook never fails a session
 }
 
 // buildWriter resolves the write endpoint (like `sync`: --server-url / QUORUM_SERVER_URL / login

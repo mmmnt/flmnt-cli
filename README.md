@@ -268,7 +268,7 @@ flmnt sync pull [--take local|cloud]   # sync remote data down to local; each re
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes
-flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git
+flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git (FLMNT_NOT_CONNECTED on stderr when no flmnt answers)
 flmnt derive --intent            # how captured prompts classify, and the openers the lexicon missed
 flmnt record-metric --name <n> --value <v>   # write an operational metric to {project}::metrics
 flmnt record-metric --hook       # PostToolUse: emit a CI metric for the command that just ran (stdin)
@@ -279,11 +279,11 @@ flmnt record-attestation --kind <k> --note <n>             # ContextAttestation 
 # Doctrine as markdown (generated — never hand-maintained)
 flmnt corpus --out training       # render the workspace's DOC-NODE documents from its domain stream
 flmnt corpus --project platform --out training   # …from another workspace you can reach
-flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start
+flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start (FLMNT_NOT_CONNECTED on stderr when no flmnt answers)
 
 # Utilities
 flmnt health                     # probe the configured server's /health (local or hosted) and, locally, the stored local token
-flmnt gate                       # keyframe-recency check for the UserPromptSubmit hook
+flmnt gate                       # UserPromptSubmit hook: keyframe-recency check on {project}::{session}::keyframe, session_id from the hook JSON on stdin; FLMNT_NOT_CONNECTED on stderr, exit 0, when no flmnt answers
 flmnt dashboard                  # open the dashboard in a browser
 flmnt version                    # print the version
 ```
