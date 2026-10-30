@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
@@ -16,9 +17,15 @@ import (
 //
 // It says the same code when something answered at the endpoint but not as flmnt's GraphQL router (an
 // HTTP error status, a body that is not GraphQL): that is a wrong endpoint, which no hook can work
-// past either. A GraphQL refusal in an answer from the router is not reported here.
+// past either. An HTTP 401 or 403 is the endpoint refusing the CLI's credentials, not a wrong
+// endpoint: the same code, with the hint to sign in again (ruling 5c53b6f5). A GraphQL refusal in an
+// answer from the router is not reported here.
 func reportNotConnected(w io.Writer, err error) bool {
 	if werr, ok := apiclient.AnsweredWrongly(err); ok {
+		if werr.StatusCode == http.StatusUnauthorized || werr.StatusCode == http.StatusForbidden {
+			fmt.Fprintln(w, signInAgainLine(werr))
+			return true
+		}
 		fmt.Fprintln(w, wrongEndpointLine(werr))
 		return true
 	}
@@ -27,6 +34,17 @@ func reportNotConnected(w io.Writer, err error) bool {
 	}
 	fmt.Fprintln(w, notConnectedLine(err))
 	return true
+}
+
+// signInAgainLine names the endpoint and the status, and the login that refreshes the token the CLI
+// sent: on loopback the CLI's own harness token comes from `flmnt login --local`, elsewhere from
+// `flmnt login`.
+func signInAgainLine(werr *apiclient.WrongAnswerError) string {
+	login := "`flmnt login`"
+	if httpx.IsLoopback(werr.Endpoint) {
+		login = "`flmnt login --local`"
+	}
+	return fmt.Sprintf("FLMNT_NOT_CONNECTED: %s refused the CLI's credentials (%s); sign in again with %s", werr.Endpoint, werr.Detail(), login)
 }
 
 func wrongEndpointLine(werr *apiclient.WrongAnswerError) string {

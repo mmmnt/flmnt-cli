@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/spf13/cobra"
 )
 
@@ -140,6 +141,100 @@ func TestHooksStayQuietOnAGraphQLRefusal(t *testing.T) {
 			}
 			if stdout.Len() != 0 || stderr.Len() != 0 {
 				t.Fatalf("a GraphQL refusal stays quiet; stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+// refusedCredentials are the answers that mean the endpoint is flmnt's but would not take the CLI's
+// token (ruling 5c53b6f5): the hint is to sign in again, not to declare another endpoint.
+var refusedCredentials = []struct {
+	name   string
+	status int
+	want   string
+}{
+	{"401", http.StatusUnauthorized, "HTTP 401"},
+	{"403", http.StatusForbidden, "HTTP 403"},
+}
+
+// assertSignInAgain: the hook exits cleanly, prints nothing on stdout, and says FLMNT_NOT_CONNECTED on
+// stderr naming the endpoint and the status, with the sign-in hint and not the endpoint hint.
+func assertSignInAgain(t *testing.T, err error, stdout, stderr *bytes.Buffer, endpoint, want string) {
+	t.Helper()
+	if err != nil {
+		t.Errorf("a hook must exit cleanly when its endpoint refuses the credentials; got %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout must stay empty; got %q", stdout.String())
+	}
+	line := stderr.String()
+	// The test server is on loopback, where the CLI's own token comes from `flmnt login --local`.
+	for _, s := range []string{"FLMNT_NOT_CONNECTED", endpoint, want, "sign in again", "`flmnt login --local`"} {
+		if !strings.Contains(line, s) {
+			t.Errorf("stderr must name %q; got %q", s, line)
+		}
+	}
+	if strings.Contains(line, "local_graphql_endpoint") {
+		t.Errorf("a refused credential must not send the agent to declare another endpoint; got %q", line)
+	}
+	if strings.Count(strings.TrimSpace(line), "\n") != 0 {
+		t.Errorf("stderr must be one line; got %q", line)
+	}
+}
+
+func TestHooksSayNotConnectedWithTheSignInHintWhenTheEndpointRefusesTheCredentials(t *testing.T) {
+	hooks := map[string]func(t *testing.T, srv *httptest.Server) (error, *bytes.Buffer, *bytes.Buffer){
+		"gate": func(t *testing.T, srv *httptest.Server) (error, *bytes.Buffer, *bytes.Buffer) {
+			c, stdout, stderr := wrongEndpointHook(t, srv, `{"session_id":"sess-1"}`)
+			return runGate(c, nil), stdout, stderr
+		},
+		"session-start": func(t *testing.T, srv *httptest.Server) (error, *bytes.Buffer, *bytes.Buffer) {
+			c, stdout, stderr := wrongEndpointHook(t, srv, `{"session_id":"sess-1"}`)
+			return runSessionStart(c, nil), stdout, stderr
+		},
+		"derive --hook": func(t *testing.T, srv *httptest.Server) (error, *bytes.Buffer, *bytes.Buffer) {
+			transcript := filepath.Join(t.TempDir(), "sess-1.jsonl")
+			line := `{"type":"user","sessionId":"sess-1","cwd":"/repo","message":{"role":"user","content":"fix the gate"}}`
+			if err := os.WriteFile(transcript, []byte(line+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			payload, _ := json.Marshal(map[string]string{"session_id": "sess-1", "transcript_path": transcript, "cwd": t.TempDir()})
+			c, stdout, stderr := wrongEndpointHook(t, srv, string(payload), "hook")
+			return runDerive(c, nil), stdout, stderr
+		},
+		"corpus --hook": func(t *testing.T, srv *httptest.Server) (error, *bytes.Buffer, *bytes.Buffer) {
+			c, stdout, stderr := wrongEndpointHook(t, srv, "", "hook")
+			return runCorpus(c, nil), stdout, stderr
+		},
+	}
+	for hook, run := range hooks {
+		for _, tc := range refusedCredentials {
+			t.Run(hook+"/"+tc.name, func(t *testing.T) {
+				srv := wrongEndpoint(t, tc.status, "text/plain", "unauthorized")
+				err, stdout, stderr := run(t, srv)
+				assertSignInAgain(t, err, stdout, stderr, srv.URL+"/mcp/graphql", tc.want)
+			})
+		}
+	}
+}
+
+// Off loopback, the token comes from the hosted login, so the hint is `flmnt login` alone.
+func TestTheSignInHintOffLoopbackIsTheHostedLogin(t *testing.T) {
+	for _, tc := range refusedCredentials {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			werr := &apiclient.WrongAnswerError{Endpoint: "https://flmnt.example/graphql", StatusCode: tc.status}
+			if !reportNotConnected(&buf, werr) {
+				t.Fatal("a refused credential must be reported")
+			}
+			line := buf.String()
+			for _, s := range []string{"FLMNT_NOT_CONNECTED", "https://flmnt.example/graphql", tc.want, "sign in again with `flmnt login`"} {
+				if !strings.Contains(line, s) {
+					t.Errorf("line must name %q; got %q", s, line)
+				}
+			}
+			if strings.Contains(line, "--local") || strings.Contains(line, "local_graphql_endpoint") {
+				t.Errorf("off loopback the hint is the hosted login alone; got %q", line)
 			}
 		})
 	}

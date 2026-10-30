@@ -179,6 +179,10 @@ is no other source: a server with no stored token is refused as ``not logged in 
 substituted, and `flmnt health` reports the local token — who it is for, or that same refusal. The
 `.mcp.json` entry `flmnt setup` writes is url-only in both environments: `{"type":"http","url":"<server>"}`,
 no headers, and the client runs the OAuth flow the MCP advertises.
+When the endpoint refuses the token with HTTP 401 or 403, `gate`, `session-start`, `derive --hook` and
+`corpus --hook` still say `FLMNT_NOT_CONNECTED` on stderr and exit 0, naming the endpoint and the status,
+with the hint to sign in again — `flmnt login --local` on a loopback endpoint, `flmnt login` elsewhere —
+instead of the `local_graphql_endpoint` hint every other wrong answer carries.
 
 A local server has no OAuth discovery to advertise its router, so the checkout declares it in
 `.flmnt.json` as `"local_graphql_endpoint": "http://localhost:4000/graphql"`; on a loopback server
