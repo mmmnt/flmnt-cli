@@ -613,6 +613,11 @@ func TestRunWritesSettingsOverASettingsLocalJSONHoldingNull(t *testing.T) {
 
 func runPrecompact(t *testing.T, env ...string) string {
 	t.Helper()
+	return runPrecompactWithInput(t, "", env...)
+}
+
+func runPrecompactWithInput(t *testing.T, stdin string, env ...string) string {
+	t.Helper()
 	b, err := assets.ReadFile("assets/hooks/precompact-checkpoint.sh")
 	if err != nil {
 		t.Fatal(err)
@@ -623,7 +628,7 @@ func runPrecompact(t *testing.T, env ...string) string {
 	}
 	c := exec.Command("bash", script)
 	c.Env = append([]string{"PATH=" + os.Getenv("PATH")}, env...)
-	c.Stdin = strings.NewReader("")
+	c.Stdin = strings.NewReader(stdin)
 	out, err := c.Output()
 	if err != nil {
 		t.Fatalf("precompact hook: %v", err)
@@ -641,6 +646,20 @@ func TestPrecompactHookNamesTheProjectFromFlmntProjectIDOverQuorumProjectID(t *t
 func TestPrecompactHookStillNamesTheProjectFromQuorumProjectIDAlone(t *testing.T) {
 	out := runPrecompact(t, "QUORUM_PROJECT_ID=ws-quorum")
 	if !strings.Contains(out, "ws-quorum::plan") {
+		t.Fatalf("got %q", out)
+	}
+}
+
+func TestPrecompactHookPointsWriteKeyframeAtTheSessionKeyframeStream(t *testing.T) {
+	out := runPrecompactWithInput(t, `{"session_id":"sess-1","hook_event_name":"PreCompact"}`, "FLMNT_PROJECT_ID=ws-1")
+	if !strings.Contains(out, "write_keyframe on 'ws-1::sess-1::keyframe'") || strings.Contains(out, "::domain") {
+		t.Fatalf("got %q", out)
+	}
+}
+
+func TestPrecompactHookWithoutAProjectPointsAtTheStreamTheSessionStartHookNamed(t *testing.T) {
+	out := runPrecompactWithInput(t, `{"session_id":"sess-1"}`)
+	if !strings.Contains(out, "write_keyframe on this session's keyframe stream") || strings.Contains(out, "domain stream") {
 		t.Fatalf("got %q", out)
 	}
 }

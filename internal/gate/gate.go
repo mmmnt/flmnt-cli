@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
+	"github.com/mmmnt/flmnt-cli/internal/session"
 )
 
 const injectionText = `[flmnt reminder] No recent keyframe found for this session.
@@ -23,7 +24,7 @@ type Config struct {
 const queryKeyframe = `query($s: ID!){ memoryKeyframe(streamId: $s){ createdAt } }`
 
 // StreamID is the session's keyframe stream.
-func (c Config) StreamID() string { return c.ProjectID + "::" + c.SessionID + "::keyframe" }
+func (c Config) StreamID() string { return session.StreamID(c.ProjectID, c.SessionID) }
 
 // Run reads the session keyframe stream's latest keyframe via memoryKeyframe and returns the reminder
 // text when there is no keyframe or it is older than Threshold, "" when it is fresh. When nothing

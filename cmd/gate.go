@@ -35,7 +35,7 @@ func runGate(cmd *cobra.Command, args []string) error {
 	if project == "" {
 		return nil
 	}
-	session := hookSessionID(cmd.InOrStdin())
+	session := readHookInput(cmd.InOrStdin()).SessionID
 	if session == "" {
 		return nil // no session named on stdin, so no session keyframe stream to read
 	}
@@ -54,21 +54,25 @@ func runGate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// hookSessionID reads the agent hook's JSON from stdin and returns its session_id. A terminal on stdin
-// (run by hand) is not read, so the command never waits for input nobody will type.
-func hookSessionID(in io.Reader) string {
+// hookInput is the part of an agent hook's JSON on stdin the hooks read.
+type hookInput struct {
+	SessionID string `json:"session_id"`
+	Cwd       string `json:"cwd"`
+}
+
+// readHookInput reads the agent hook's JSON from stdin. A terminal on stdin (run by hand) is not read,
+// so the command never waits for input nobody will type.
+func readHookInput(in io.Reader) hookInput {
+	var payload hookInput
 	if f, ok := in.(*os.File); ok {
 		if st, err := f.Stat(); err != nil || st.Mode()&os.ModeCharDevice != 0 {
-			return ""
+			return payload
 		}
 	}
-	var payload struct {
-		SessionID string `json:"session_id"`
-	}
 	if err := json.NewDecoder(in).Decode(&payload); err != nil {
-		return ""
+		return hookInput{}
 	}
-	return payload.SessionID
+	return payload
 }
 
 func init() {

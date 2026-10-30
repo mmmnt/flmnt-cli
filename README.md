@@ -283,6 +283,7 @@ flmnt sync pull [--take local|cloud]   # sync remote data down to local; each re
                                  # the local side authenticates from the token `flmnt login --local` stores, minted again from your identity when a hosted login swept it
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
+flmnt session-start              # SessionStart: make sure {project}::{session}::keyframe exists (session_id from the hook JSON on stdin) and print the stream_id to pass to write_keyframe/read_keyframe; FLMNT_NOT_CONNECTED on stderr, exit 0, when no flmnt answers
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes
 flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git (FLMNT_NOT_CONNECTED on stderr when no flmnt answers)
 flmnt derive --intent            # how captured prompts classify, and the openers the lexicon missed
