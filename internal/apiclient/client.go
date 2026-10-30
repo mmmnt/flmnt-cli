@@ -101,11 +101,15 @@ func (c *Client) Query(query string, variables map[string]any, out any) error {
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("graphql HTTP %d: %s", resp.StatusCode, raw)
+		return &WrongAnswerError{Endpoint: c.endpoint, StatusCode: resp.StatusCode, Body: string(raw)}
 	}
 	var envelope gqlResponse
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return fmt.Errorf("invalid graphql response: %w", err)
+		return &WrongAnswerError{Endpoint: c.endpoint, StatusCode: resp.StatusCode, Body: string(raw), NotGraphQL: true, ContentType: resp.Header.Get("Content-Type")}
+	}
+	if envelope.Data == nil && len(envelope.Errors) == 0 {
+		// JSON, but neither data nor errors: some other service answered, not a GraphQL router.
+		return &WrongAnswerError{Endpoint: c.endpoint, StatusCode: resp.StatusCode, Body: string(raw), NotGraphQL: true, ContentType: resp.Header.Get("Content-Type")}
 	}
 	if len(envelope.Errors) > 0 {
 		return fmt.Errorf("graphql error: %s", gqlErrorMessage(envelope.Errors[0]))

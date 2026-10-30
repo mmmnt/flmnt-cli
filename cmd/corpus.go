@@ -25,7 +25,7 @@ func runCorpus(cmd *cobra.Command, args []string) error {
 	err := renderCorpus(cmd)
 	// A SessionStart refresh runs before anybody has typed anything, so it never fails a session start.
 	// Not logged in, or aimed at a workspace with no DOC-NODE, it leaves the files alone and says
-	// nothing; when no flmnt answers it says FLMNT_NOT_CONNECTED on stderr. Run by hand it reports,
+	// nothing; when no flmnt answers, or its endpoint answers with an error, it says FLMNT_NOT_CONNECTED on stderr. Run by hand it reports,
 	// because then somebody is listening.
 	if hook, _ := cmd.Flags().GetBool("hook"); hook {
 		reportNotConnected(cmd.ErrOrStderr(), err)

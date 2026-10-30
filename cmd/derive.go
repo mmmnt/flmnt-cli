@@ -169,7 +169,7 @@ func runWrite(cmd *cobra.Command, proj derive.Project, sessions []string) error 
 }
 
 // runHook is the Stop-hook entry: reads the hook JSON from stdin (transcript_path + cwd), derives
-// that one session, and imports it. Never fails the session: when no flmnt answers it says
+// that one session, and imports it. Never fails the session: when no flmnt answers, or its endpoint answers with an error, it says
 // FLMNT_NOT_CONNECTED on stderr; any other failure stays quiet.
 func runHook(cmd *cobra.Command) error {
 	var payload struct {
@@ -190,7 +190,7 @@ func runHook(cmd *cobra.Command) error {
 	}
 	der := derive.DeriveSession(payload.Cwd, recs)
 	if _, err := w.WriteSession(der); err != nil {
-		reportNotConnected(cmd.ErrOrStderr(), err) // FLMNT_NOT_CONNECTED when nothing answered; else quiet
+		reportNotConnected(cmd.ErrOrStderr(), err) // FLMNT_NOT_CONNECTED when nothing answered or the endpoint answered wrongly; else quiet
 	}
 	return nil // a hook never fails a session
 }

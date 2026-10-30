@@ -54,3 +54,46 @@ func TestIsUnreachableFalseForNil(t *testing.T) {
 		t.Fatal("no error is not unreachable")
 	}
 }
+
+func TestAnsweredWronglyNamesTheEndpointAndTheStatusOfAnHTTPError(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusInternalServerError} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "nope", status)
+		}))
+		err := New(srv.URL+"/mcp/graphql", "tok").Query("query { x }", nil, nil)
+		srv.Close()
+		werr, ok := AnsweredWrongly(err)
+		if !ok || werr.Endpoint != srv.URL+"/mcp/graphql" || werr.StatusCode != status {
+			t.Fatalf("HTTP %d is a wrong answer at the endpoint; got %#v ok=%v (%v)", status, werr, ok, err)
+		}
+	}
+}
+
+func TestAnsweredWronglyForABodyThatIsNotGraphQL(t *testing.T) {
+	for _, body := range []string{"<!doctype html><html></html>", `{"jsonrpc":"2.0","id":1}`} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+		err := New(srv.URL, "tok").Query("query { x }", nil, nil)
+		srv.Close()
+		if _, ok := AnsweredWrongly(err); !ok {
+			t.Fatalf("a 200 whose body %q is not a GraphQL response is a wrong answer; got %v", body, err)
+		}
+	}
+}
+
+func TestAnsweredWronglyFalseForAGraphQLAnswer(t *testing.T) {
+	for _, body := range []string{`{"errors":[{"message":"boom"}]}`, `{"data":{"x":null}}`, `{"data":null,"errors":[{"message":"no"}]}`} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+		err := New(srv.URL, "tok").Query("query { x }", nil, &struct{}{})
+		srv.Close()
+		if _, ok := AnsweredWrongly(err); ok {
+			t.Fatalf("a GraphQL answer %q is not a wrong answer; got %v", body, err)
+		}
+	}
+	if _, ok := AnsweredWrongly(New(refusedURL(t), "tok").Query("query { x }", nil, nil)); ok {
+		t.Fatal("nothing answering is unreachable, not a wrong answer")
+	}
+}

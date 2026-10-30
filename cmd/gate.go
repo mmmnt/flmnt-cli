@@ -17,7 +17,8 @@ var gateCmd = &cobra.Command{
 	Short: "Context-recency check for the UserPromptSubmit hook",
 	Long: "For an agent's prompt hook: reads the latest keyframe of the session's {project}::{session}::keyframe\n" +
 		"stream (the session id comes from the hook JSON on stdin) and prints a reminder when there is none or it\n" +
-		"is older than --threshold. When no flmnt answers it says FLMNT_NOT_CONNECTED on stderr and exits 0.",
+		"is older than --threshold. When no flmnt answers, or its endpoint answers\n" +
+		"with an error (an HTTP error status, a body that is not GraphQL), it says FLMNT_NOT_CONNECTED on stderr and exits 0.",
 	RunE: runGate,
 }
 

@@ -32,8 +32,9 @@ func (c Config) StreamID() string { return session.StreamID(c.ProjectID, c.Sessi
 
 // Run reads the session keyframe stream's latest keyframe via memoryKeyframe and returns the reminder
 // text when there is no keyframe or it is older than Threshold, "" when it is fresh. When nothing
-// answers it returns the transport error (apiclient.IsUnreachable) for the caller to report; any other
-// failure (unauthorized, a GraphQL error) is silent, so a prompt hook never blocks or noises a session.
+// answers (apiclient.IsUnreachable), or something not a GraphQL router answers (apiclient.AnsweredWrongly),
+// it returns the error for the caller to report; a GraphQL refusal (unauthorized, a stream refused) is
+// silent, so a prompt hook never blocks or noises a session.
 func Run(cfg Config) (string, error) {
 	var out struct {
 		MemoryKeyframe *struct {
@@ -41,7 +42,7 @@ func Run(cfg Config) (string, error) {
 		} `json:"memoryKeyframe"`
 	}
 	if err := cfg.GQL.Query(queryKeyframe, map[string]any{"s": cfg.StreamID()}, &out); err != nil {
-		if apiclient.IsUnreachable(err) {
+		if _, wrong := apiclient.AnsweredWrongly(err); wrong || apiclient.IsUnreachable(err) {
 			return "", err
 		}
 		return "", nil

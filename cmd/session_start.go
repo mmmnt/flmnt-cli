@@ -15,7 +15,8 @@ var sessionStartCmd = &cobra.Command{
 	Long: "For an agent's SessionStart hook (installed by `flmnt setup`): reads the hook JSON on stdin (session_id,\n" +
 		"cwd), resolves the project the way gate does, makes sure {project}::{session_id}::keyframe exists (creating\n" +
 		"it when absent) and prints the stream_id the agent passes to write_keyframe and read_keyframe this session.\n" +
-		"It never blocks a session: when no flmnt answers it says FLMNT_NOT_CONNECTED on stderr and exits 0.",
+		"It never blocks a session: when no flmnt answers, or its endpoint answers\n" +
+		"with an error, it says FLMNT_NOT_CONNECTED on stderr and exits 0.",
 	RunE: runSessionStart,
 }
 

@@ -284,9 +284,9 @@ flmnt sync pull [--take local|cloud]   # sync remote data down to local; each re
                                  # the local side authenticates from the token `flmnt login --local` stores, minted again from your identity when a hosted login swept it
 
 # Memory (continuity loop + deterministic writes for hooks / CI)
-flmnt session-start              # SessionStart: make sure {project}::{session}::keyframe exists (session_id from the hook JSON on stdin) and print the stream_id to pass to write_keyframe/read_keyframe; FLMNT_NOT_CONNECTED on stderr, exit 0, when no flmnt answers
+flmnt session-start              # SessionStart: make sure {project}::{session}::keyframe exists (session_id from the hook JSON on stdin) and print the stream_id to pass to write_keyframe/read_keyframe; FLMNT_NOT_CONNECTED on stderr, exit 0, when no flmnt answers or its endpoint answers with an error
 flmnt brief                      # SessionStart: inject latest keyframe + recent decisions + directions/questions + mistakes
-flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git (FLMNT_NOT_CONNECTED on stderr when no flmnt answers)
+flmnt derive --hook              # Stop: derive prompts/keyframes/mistakes from transcript + git (FLMNT_NOT_CONNECTED on stderr when no flmnt answers or its endpoint answers with an error)
 flmnt derive --intent            # how captured prompts classify, and the openers the lexicon missed
 flmnt record-metric --name <n> --value <v>   # write an operational metric to {project}::metrics
 flmnt record-metric --hook       # PostToolUse: emit a CI metric for the command that just ran (stdin)
@@ -297,11 +297,11 @@ flmnt record-attestation --kind <k> --note <n>             # ContextAttestation 
 # Doctrine as markdown (generated — never hand-maintained)
 flmnt corpus --out training       # render the workspace's DOC-NODE documents from its domain stream
 flmnt corpus --project platform --out training   # …from another workspace you can reach
-flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start (FLMNT_NOT_CONNECTED on stderr when no flmnt answers)
+flmnt corpus --hook --project platform            # SessionStart: refresh silently, never fail a start (FLMNT_NOT_CONNECTED on stderr when no flmnt answers or its endpoint answers with an error)
 
 # Utilities
 flmnt health                     # probe the configured server's /health (local or hosted) and, locally, the stored local token
-flmnt gate                       # UserPromptSubmit hook: keyframe-recency check on {project}::{session}::keyframe, session_id from the hook JSON on stdin; FLMNT_NOT_CONNECTED on stderr, exit 0, when no flmnt answers
+flmnt gate                       # UserPromptSubmit hook: keyframe-recency check on {project}::{session}::keyframe, session_id from the hook JSON on stdin; FLMNT_NOT_CONNECTED on stderr, exit 0, when no flmnt answers or its endpoint answers with an error
 flmnt dashboard                  # open the dashboard in a browser
 flmnt version                    # print the version
 ```
