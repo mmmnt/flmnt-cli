@@ -1,15 +1,19 @@
 package gate
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/mmmnt/flmnt-cli/internal/apiclient"
 	"github.com/mmmnt/flmnt-cli/internal/session"
 )
 
-const injectionText = `[flmnt reminder] No recent keyframe found for this session.
-Before starting your next task, call write_keyframe on this session's keyframe stream to checkpoint your current understanding.
-Use list_streams to find the stream_id if needed.`
+// reminder is the nudge for a session with no fresh keyframe. It names the session's exact keyframe stream,
+// the way the session-start line does, so the agent never has to look it up.
+func reminder(streamID string) string {
+	return fmt.Sprintf("[flmnt reminder] No recent keyframe found for this session.\n"+
+		"Before starting your next task, call write_keyframe with stream_id %q to checkpoint your current understanding.", streamID)
+}
 
 // Config is the context-recency check. GQL is the authenticated router GraphQL client so the keyframe
 // read is scoped to the caller's workspace; SessionID names the agent session whose keyframe stream,
@@ -43,14 +47,14 @@ func Run(cfg Config) (string, error) {
 		return "", nil
 	}
 	if out.MemoryKeyframe == nil {
-		return injectionText, nil
+		return reminder(cfg.StreamID()), nil
 	}
 	createdAt, err := time.Parse(time.RFC3339, out.MemoryKeyframe.CreatedAt)
 	if err != nil {
-		return injectionText, nil
+		return reminder(cfg.StreamID()), nil
 	}
 	if time.Since(createdAt) > cfg.Threshold {
-		return injectionText, nil
+		return reminder(cfg.StreamID()), nil
 	}
 	return "", nil
 }

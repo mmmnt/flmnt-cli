@@ -23,7 +23,7 @@ func TestRunReturnsReminderWhenNoKeyframe(t *testing.T) {
 	srv := gqlServer(`{"data":{"memoryKeyframe":null}}`)
 	defer srv.Close()
 	out, _ := Run(Config{GQL: apiclient.New(srv.URL, "tok"), ProjectID: "p", Threshold: 30 * time.Minute})
-	if out != injectionText {
+	if out != reminder("p::::keyframe") {
 		t.Fatalf("want reminder, got %q", out)
 	}
 }
@@ -43,7 +43,7 @@ func TestRunReturnsReminderWhenKeyframeStale(t *testing.T) {
 	srv := gqlServer(fmt.Sprintf(`{"data":{"memoryKeyframe":{"createdAt":%q}}}`, stale))
 	defer srv.Close()
 	out, _ := Run(Config{GQL: apiclient.New(srv.URL, "tok"), ProjectID: "p", Threshold: 30 * time.Minute})
-	if out != injectionText {
+	if out != reminder("p::::keyframe") {
 		t.Fatalf("want reminder, got %q", out)
 	}
 }
@@ -81,10 +81,23 @@ func TestRunReadsTheSessionKeyframeStream(t *testing.T) {
 }
 
 func TestReminderTextNamesFlmntAndNotQuorum(t *testing.T) {
-	if strings.Contains(strings.ToLower(injectionText), "quorum") {
-		t.Fatalf("the reminder must not name quorum: %q", injectionText)
+	text := reminder("p::s::keyframe")
+	if strings.Contains(strings.ToLower(text), "quorum") {
+		t.Fatalf("the reminder must not name quorum: %q", text)
 	}
-	if !strings.HasPrefix(injectionText, "[flmnt reminder]") {
-		t.Fatalf("the reminder must open with [flmnt reminder]: %q", injectionText)
+	if !strings.HasPrefix(text, "[flmnt reminder]") {
+		t.Fatalf("the reminder must open with [flmnt reminder]: %q", text)
+	}
+}
+
+func TestTheReminderNamesTheSessionsExactKeyframeStream(t *testing.T) {
+	srv := gqlServer(`{"data":{"memoryKeyframe":null}}`)
+	defer srv.Close()
+	out, _ := Run(Config{GQL: apiclient.New(srv.URL, "tok"), ProjectID: "ws-1", SessionID: "sess-1", Threshold: 30 * time.Minute})
+	if !strings.Contains(out, `"ws-1::sess-1::keyframe"`) {
+		t.Fatalf("the reminder must name the session's keyframe stream ws-1::sess-1::keyframe: %q", out)
+	}
+	if strings.Contains(out, "list_streams") {
+		t.Fatalf("the reminder must not send the agent to list_streams for a stream it can name: %q", out)
 	}
 }
