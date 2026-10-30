@@ -798,3 +798,40 @@ func TestCheckConfigsRefusesSettingsWhoseHooksAreNotAHookMap(t *testing.T) {
 		t.Fatalf("CheckConfigs error = %v", err)
 	}
 }
+
+func TestRunKeepsAUsersOwnFlmntHookWithOtherArguments(t *testing.T) {
+	dir := t.TempDir()
+	seedSettings(t, dir, `{"hooks":{
+		"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"flmnt brief --foo"},{"type":"command","command":"/old/bin/flmnt brief"}]}],
+		"Notification":[{"matcher":"","hooks":[{"type":"command","command":"/usr/local/bin/flmnt record --mine"}]}]}}`)
+	cfg := Config{ServerURL: "u", ProjectID: "p", Dir: dir, SessionStartCmd: "/new/bin/flmnt session-start", BriefCmd: "/new/bin/flmnt brief"}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	ss := hookCommands(t, dir, "SessionStart")
+	if count(ss, "flmnt brief --foo") != 1 || count(ss, "/old/bin/flmnt brief") != 0 || count(ss, "/new/bin/flmnt brief") != 1 {
+		t.Fatalf("SessionStart = %v", ss)
+	}
+	if got := hookCommands(t, dir, "Notification"); count(got, "/usr/local/bin/flmnt record --mine") != 1 {
+		t.Fatalf("Notification = %v", got)
+	}
+	if err := Run(cfg); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(filepath.Join(dir, ".claude", "settings.local.json"))
+	if string(first) != string(second) {
+		t.Fatalf("second run changed settings:\n%s\n---\n%s", first, second)
+	}
+}
+
+func TestRunReplacesAKitHookAnEarlierRunWroteFromAQuotedPathWithSpaces(t *testing.T) {
+	dir := t.TempDir()
+	seedSettings(t, dir, `{"hooks":{"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"\"/Applications/My Tools/flmnt\" gate"}]}]}}`)
+	if err := Run(Config{ServerURL: "u", ProjectID: "p", Dir: dir, GateCmd: "/new/bin/flmnt gate"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := hookCommands(t, dir, "UserPromptSubmit"); count(got, `"/Applications/My Tools/flmnt" gate`) != 0 || count(got, "/new/bin/flmnt gate") != 1 {
+		t.Fatalf("UserPromptSubmit = %v", got)
+	}
+}

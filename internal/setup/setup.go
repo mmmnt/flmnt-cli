@@ -418,21 +418,31 @@ func buildHooks(cfg Config) map[string][]hookMatcher {
 var hookEvents = []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "SubagentStop", "Stop", "SessionEnd"}
 
 // mergeHooks is the settings' hook map with the kit's hooks in place of the ones an earlier setup wrote,
-// and every other hook kept as it was. A hook is the kit's when it runs the flmnt CLI, runs one of the
-// kit's scripts in .claude/flmnt-hooks, or is a command this run writes. A hooks value that is not a
-// hook map stops setup, naming the file and the event, before anything is written.
+// and every other hook kept as it was. A hook is the kit's when it is a command this run writes, runs one
+// of the kit's scripts in .claude/flmnt-hooks, or runs the flmnt CLI (any install path, so an earlier
+// setup's binary path is replaced) with exactly the subcommand and arguments a kit command carries. A
+// user's own `flmnt …` hook with other arguments is not the kit's and is kept. A hooks value that is not
+// a hook map stops setup, naming the file and the event, before anything is written.
 func mergeHooks(path string, existing any, cfg Config) (map[string]any, error) {
 	kit := buildHooks(cfg)
 	owned := map[string]bool{}
+	kitArgs := map[string]bool{}
 	for _, groups := range kit {
 		for _, g := range groups {
 			for _, h := range g.Hooks {
 				owned[h.Command] = true
+				if args, ok := flmntArgs(h.Command); ok {
+					kitArgs[args] = true
+				}
 			}
 		}
 	}
 	isKit := func(command string) bool {
-		return owned[command] || runsFlmnt(command) || strings.Contains(command, hookScriptsRel+"/")
+		if owned[command] || strings.Contains(command, hookScriptsRel+"/") {
+			return true
+		}
+		args, ok := flmntArgs(command)
+		return ok && kitArgs[args]
 	}
 
 	out := map[string]any{}
@@ -514,14 +524,25 @@ func keptGroups(path, event string, v any, isKit func(string) bool) ([]any, erro
 	return kept, nil
 }
 
-// runsFlmnt reports a command whose program is the flmnt CLI, wherever it is installed.
-func runsFlmnt(command string) bool {
-	fields := strings.Fields(command)
-	if len(fields) == 0 {
-		return false
+// flmntArgs is what follows the program of a command whose program is the flmnt CLI, wherever it is
+// installed (a quoted path may hold spaces), with its whitespace normalised; ok is false for any other program.
+func flmntArgs(command string) (string, bool) {
+	command = strings.TrimSpace(command)
+	var program, rest string
+	if q := command[:min(1, len(command))]; q == `"` || q == "'" {
+		end := strings.Index(command[1:], q)
+		if end < 0 {
+			return "", false
+		}
+		program, rest = command[1:end+1], command[end+2:]
+	} else {
+		program, rest, _ = strings.Cut(command, " ")
 	}
-	name := filepath.Base(strings.Trim(fields[0], `"'`))
-	return name == "flmnt" || name == "flmnt.exe"
+	name := filepath.Base(program)
+	if name != "flmnt" && name != "flmnt.exe" {
+		return "", false
+	}
+	return strings.Join(strings.Fields(rest), " "), true
 }
 
 // mergePermissions unions the kit's tool allow-list into any existing permissions, preserving the
